@@ -3644,6 +3644,9 @@ static struct ast_frame *__ast_read(struct ast_channel *chan, int dropaudio, int
 		ast_channel_generator(chan)->generate(chan, tmp, -1, -1);
 		ast_channel_generatordata_set(chan, tmp);
 		f = &ast_null_frame;
+
+		ast_debug(1, "__ast_read channel '%s'. ast_channel_timingfd\n", ast_channel_name(chan));
+
 		ast_channel_fdno_set(chan, -1);
 		goto done;
 	} else if (ast_channel_fd_isset(chan, AST_JITTERBUFFER_FD) && ast_channel_fdno(chan) == AST_JITTERBUFFER_FD) {
@@ -3654,6 +3657,9 @@ static struct ast_frame *__ast_read(struct ast_channel *chan, int dropaudio, int
 	   one sizeof(blah) per frame that we send from it */
 	if (ast_channel_internal_alert_read(chan) == AST_ALERT_READ_FATAL) {
 		f = &ast_null_frame;
+
+		ast_debug(1, "__ast_read channel '%s'. AST_ALERT_READ_FATAL\n", ast_channel_name(chan));
+
 		goto done;
 	}
 
@@ -3680,6 +3686,9 @@ static struct ast_frame *__ast_read(struct ast_channel *chan, int dropaudio, int
 		if (!f) {
 			/* There were no acceptable frames on the readq. */
 			f = &ast_null_frame;
+
+			ast_debug(1, "__ast_read channel '%s'. There were no acceptable frames on the readq\n", ast_channel_name(chan));
+
 			if (!skipped_dtmf_frame) {
 				/*
 				 * Do not trigger alert pipe if only buffered dtmf begin or end frames
@@ -3727,6 +3736,9 @@ static struct ast_frame *__ast_read(struct ast_channel *chan, int dropaudio, int
 				if (!stream) {
 					ast_frfree(f);
 					f = &ast_null_frame;
+
+					ast_debug(1, "__ast_read channel '%s'. format that has not been negotiated\n", ast_channel_name(chan));
+
 				} else {
 					f->stream_num = ast_stream_get_position(stream);
 				}
@@ -3818,6 +3830,9 @@ static struct ast_frame *__ast_read(struct ast_channel *chan, int dropaudio, int
 			 */
 			ast_frfree(f);
 			f = &ast_null_frame;
+
+			ast_debug(1, "__ast_read channel '%s'. dropnondefault && stream != default_stream\n", ast_channel_name(chan));
+
 		}
 
 		ast_debug(1, "__ast_read channel '%s', entering swith frameType=%d\n", ast_channel_name(chan), f->frametype);
