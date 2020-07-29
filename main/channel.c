@@ -3526,7 +3526,6 @@ static struct ast_frame *__ast_read(struct ast_channel *chan, int dropaudio, int
 
 	ast_debug(1, "START __ast_read channel '%s'. dropaudio=%d, dropnondefault=%d\n", ast_channel_name(chan), dropaudio, dropnondefault);
 
-
 	/* this function is very long so make sure there is only one return
 	 * point at the end (there are only two exceptions to this).
 	 */
@@ -3666,6 +3665,8 @@ static struct ast_frame *__ast_read(struct ast_channel *chan, int dropaudio, int
 		goto done;
 	}
 
+	if (f) ast_debug(1, "BLOCK 1 __ast_read %s, frame type=%d\n", ast_channel_name(chan), f->frametype);
+
 	/* Check for pending read queue */
 	if (!AST_LIST_EMPTY(ast_channel_readq(chan))) {
 		int skipped_dtmf_frame = 0;
@@ -3792,6 +3793,8 @@ static struct ast_frame *__ast_read(struct ast_channel *chan, int dropaudio, int
 		/* Perform the framehook read event here. After the frame enters the framehook list
 		 * there is no telling what will happen, <insert mad scientist laugh here>!!! */
 		f = ast_framehook_list_read_event(ast_channel_framehooks(chan), f);
+
+		ast_debug(1, "__ast_read %s, ast_framehook_list_read_event frame type=%d\n", ast_channel_name(chan), f->frametype);
 	}
 
 	/*
