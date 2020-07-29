@@ -13,6 +13,77 @@
 ==============================================================================
 
 ------------------------------------------------------------------------------
+--- Functionality changes from Asterisk 16.11.0 to Asterisk 16.12.0 ----------
+------------------------------------------------------------------------------
+
+AMI
+------------------
+ * You can now specify an optional 'Content-Type' as an argument for the Asterisk
+   SendText manager action.
+
+res_pjsip
+------------------
+ * Added a new PJSIP system setting called disable_rport.
+   Default is no to keep support working as before.
+
+   If it is false (default) it adds the 'rport' parameter in the outgoing request message.
+   If it is true it does not add the 'rport' parameter in the outgoing request message.
+
+   This is a system option, but working as a global option.
+
+res_sorcery_memory_cache
+------------------
+ * The SorceryMemoryCacheExpireObject AMI action and CLI
+   command allow expiring of a specific object within the
+   sorcery memory cache. This is done by removing the
+   object from the cache with the expectation that the
+   cache will then re-populate the object when it is next
+   needed.
+
+   For full backend caching this does not occur. The cache
+   won't repopulate until an entire refresh is done resulting
+   in the possibility that objects are missing until that
+   time.
+
+   The AMI action and CLI command will now not allow
+   expiring of an object if the cache is configured as a
+   full backend cache. Instead you must use either the
+   SorceryMemoryCacheExpire or SorceryMemoryCachePopulate
+   AMI actions or their associated CLI commands.
+
+------------------------------------------------------------------------------
+--- Functionality changes from Asterisk 16.10.0 to Asterisk 16.11.0 ----------
+------------------------------------------------------------------------------
+
+res_ari_channels
+------------------
+ * When creating a channel in ARI using the create call
+   you can now specify dialplan variables to be set as part
+   of the same operation.
+
+res_pjsip_logger
+------------------
+ * The PJSIP packet logger now has the following CLI commands:
+
+   pjsip set logger pcap <filename>
+
+   When used this will create a pcap file containing the incoming
+   and outgoing SIP packets, in unencrypted form.
+
+   pjsip set logger console <on / off>
+
+   This allows you to toggle logging to console on and off.
+
+   pjsip set logger host <IP/subnet mask> add
+
+   This allows you to add an additional IP address or subnet
+   mask to logging, allowing you to log multiple instead of
+   just a single IP address or all traffic.
+
+   The normal "pjsip set logger host" CLI command has also been
+   expanded to allow subnet masks as well.
+
+------------------------------------------------------------------------------
 --- Functionality changes from Asterisk 16.9.0 to Asterisk 16.10.0 -----------
 ------------------------------------------------------------------------------
 
