@@ -3570,17 +3570,6 @@ static struct ast_frame *__ast_read(struct ast_channel *chan, int dropaudio, int
 #endif
 	}
 
-	ast_debug(1, "__ast_read channel '%s'. dropaudio=%d, dropnondefault=%d\n", ast_channel_name(chan), dropaudio, dropnondefault);
-
-	// struct ast_str *codec_buf = ast_str_alloca(AST_FORMAT_CAP_NAMES_LEN);
-	// /* If media was received from a non-default stream don't perform any actions, let it just go through */
-	// if (stream != default_stream) {
-	// 	ast_debug(1, "stream != default_stream,  %s\n", ast_format_cap_get_names(ast_stream_get_formats(stream), &codec_buf));
-	// 	break;
-	// } else {
-	// 	ast_debug(1, "processing stream %s\n", ast_format_cap_get_names(ast_stream_get_formats(stream), &codec_buf));
-	// }
-
 	prestate = ast_channel_state(chan);
 
 	if (ast_channel_timingfd(chan) > -1 && ast_channel_fdno(chan) == AST_TIMING_FD) {
@@ -3797,6 +3786,18 @@ static struct ast_frame *__ast_read(struct ast_channel *chan, int dropaudio, int
 	ast_channel_fdno_set(chan, -1);
 
 	if (f) {
+
+		ast_debug(1, "f is known! __ast_read channel '%s'. dropaudio=%d, dropnondefault=%d\n", ast_channel_name(chan), dropaudio, dropnondefault);
+
+		// struct ast_str *codec_buf = ast_str_alloca(AST_FORMAT_CAP_NAMES_LEN);
+		// /* If media was received from a non-default stream don't perform any actions, let it just go through */
+		// if (stream != default_stream) {
+		// 	ast_debug(1, "stream != default_stream,  %s\n", ast_format_cap_get_names(ast_stream_get_formats(stream), &codec_buf));
+		// 	break;
+		// } else {
+		// 	ast_debug(1, "processing stream %s\n", ast_format_cap_get_names(ast_stream_get_formats(stream), &codec_buf));
+		// }
+
 		struct ast_frame *readq_tail = AST_LIST_LAST(ast_channel_readq(chan));
 		struct ast_control_read_action_payload *read_action_payload;
 		struct ast_party_connected_line connected;
