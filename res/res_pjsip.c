@@ -1749,6 +1749,12 @@
 						</para></note>
 					</description>
 				</configOption>
+				<configOption name="disable_rport" default="no">
+					<synopsis>Disable the use of rport in outgoing requests.</synopsis>
+					<description><para>
+						Remove "rport" parameter from the outgoing requests.
+					</para></description>
+				</configOption>
 				<configOption name="type">
 					<synopsis>Must be of type 'system' UNLESS the object name is 'system'.</synopsis>
 				</configOption>
@@ -3545,6 +3551,12 @@ pjsip_dialog *ast_sip_create_dialog_uac(const struct ast_sip_endpoint *endpoint,
 	pj_cstr(&target_uri, uri);
 
 	res = pjsip_dlg_create_uac(pjsip_ua_instance(), &local_uri, NULL, &remote_uri, &target_uri, &dlg);
+	if (res == PJ_SUCCESS && !(PJSIP_URI_SCHEME_IS_SIP(dlg->target) || PJSIP_URI_SCHEME_IS_SIPS(dlg->target))) {
+		/* dlg->target is a pjsip_other_uri, but it's assumed to be a
+		 * pjsip_sip_uri below. Fail fast. */
+		res = PJSIP_EINVALIDURI;
+		pjsip_dlg_terminate(dlg);
+	}
 	if (res != PJ_SUCCESS) {
 		if (res == PJSIP_EINVALIDURI) {
 			ast_log(LOG_ERROR,
@@ -3913,7 +3925,7 @@ static int create_out_of_dialog_request(const pjsip_method *method, struct ast_s
 		contact_hdr = pjsip_msg_find_hdr_by_names((*tdata)->msg, &HCONTACT, &HCONTACTSHORT, NULL);
 		if (contact_hdr) {
 			contact_uri = pjsip_uri_get_uri(contact_hdr->uri);
-			pj_strdup2(pool, &contact_uri->user, endpoint->contact_user);
+			pj_strdup2((*tdata)->pool, &contact_uri->user, endpoint->contact_user);
 		}
 	}
 

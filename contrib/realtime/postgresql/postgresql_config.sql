@@ -1352,5 +1352,14 @@ DROP TYPE moh_mode_values_tmp;
 
 UPDATE alembic_version SET version_num='fbb7766f17bc' WHERE alembic_version.version_num = '3a094a18e75b';
 
+<<<<<<< HEAD
+=======
+-- Running upgrade fbb7766f17bc -> 79290b511e4b
+
+ALTER TABLE ps_systems ADD COLUMN disable_rport ast_bool_values;
+
+UPDATE alembic_version SET version_num='79290b511e4b' WHERE alembic_version.version_num = 'fbb7766f17bc';
+
+>>>>>>> a97bffcb5a4ca93f1c4b7740badc7cf9525afb08
 COMMIT;
 

@@ -3847,7 +3847,12 @@ static struct ast_frame *__ast_read(struct ast_channel *chan, int dropaudio, int
 					break;
 				case AST_FRAME_READ_ACTION_SEND_TEXT:
 					ast_channel_unlock(chan);
-					ast_sendtext(chan, (const char *) read_action_payload->payload);
+					ast_sendtext(chan, (const char *)read_action_payload->payload);
+					ast_channel_lock(chan);
+					break;
+				case AST_FRAME_READ_ACTION_SEND_TEXT_DATA:
+					ast_channel_unlock(chan);
+					ast_sendtext_data(chan, (struct ast_msg_data *)read_action_payload->payload);
 					ast_channel_lock(chan);
 					break;
 				}
@@ -10774,6 +10779,7 @@ AST_MUTEX_DEFINE_STATIC(channel_move_lock);
 
 int ast_channel_move(struct ast_channel *dest, struct ast_channel *source)
 {
+	RAII_VAR(struct ast_json *, blob, NULL, ast_json_unref);
 	SCOPED_MUTEX(lock, &channel_move_lock);
 
 	if (dest == source) {
@@ -10797,6 +10803,10 @@ int ast_channel_move(struct ast_channel *dest, struct ast_channel *source)
 
 	ast_channel_masq_set(dest, source);
 	ast_channel_masqr_set(source, dest);
+
+	blob = ast_json_pack("{s: s}",
+			"newchanneluniqueid", ast_channel_uniqueid(dest));
+	ast_channel_publish_blob(source, ast_channel_masquerade_type(), blob);
 
 	ast_channel_unlock(dest);
 	ast_channel_unlock(source);

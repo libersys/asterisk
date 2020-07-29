@@ -1242,14 +1242,17 @@ static int chan_pjsip_devicestate(const char *data)
 static int chan_pjsip_queryoption(struct ast_channel *ast, int option, void *data, int *datalen)
 {
 	struct ast_sip_channel_pvt *channel = ast_channel_tech_pvt(ast);
-	struct ast_sip_session *session = channel->session;
 	int res = -1;
 	enum ast_t38_state state = T38_STATE_UNAVAILABLE;
 
+	if (!channel) {
+		return -1;
+	}
+
 	switch (option) {
 	case AST_OPTION_T38_STATE:
-		if (session->endpoint->media.t38.enabled) {
-			switch (session->t38state) {
+		if (channel->session->endpoint->media.t38.enabled) {
+			switch (channel->session->t38state) {
 			case T38_LOCAL_REINVITE:
 			case T38_PEER_REINVITE:
 				state = T38_STATE_NEGOTIATING;
@@ -2000,7 +2003,7 @@ static void xfer_client_on_evsub_state(pjsip_evsub *sub, pjsip_event *event)
 		/* Check for NOTIFY complete or error. */
 		pjsip_msg *msg;
 		pjsip_msg_body *body;
-		pjsip_status_line status_line = { .code = PJSIP_SC_NULL };
+		pjsip_status_line status_line = { .code = 0 };
 		pj_bool_t is_last;
 		pj_status_t status;
 
