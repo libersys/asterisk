@@ -3648,7 +3648,7 @@ static struct ast_frame *__ast_read(struct ast_channel *chan, int dropaudio, int
 		ast_channel_generatordata_set(chan, tmp);
 		f = &ast_null_frame;
 
-		ast_debug(1, "__ast_read channel '%s'. ast_channel_timingfd\n", ast_channel_name(chan));
+		// ast_debug(1, "__ast_read channel '%s'. ast_channel_timingfd\n", ast_channel_name(chan));
 
 		ast_channel_fdno_set(chan, -1);
 		goto done;
@@ -3661,7 +3661,7 @@ static struct ast_frame *__ast_read(struct ast_channel *chan, int dropaudio, int
 	if (ast_channel_internal_alert_read(chan) == AST_ALERT_READ_FATAL) {
 		f = &ast_null_frame;
 
-		ast_debug(1, "__ast_read channel '%s'. AST_ALERT_READ_FATAL\n", ast_channel_name(chan));
+		// ast_debug(1, "__ast_read channel '%s'. AST_ALERT_READ_FATAL\n", ast_channel_name(chan));
 
 		goto done;
 	}
@@ -3690,7 +3690,7 @@ static struct ast_frame *__ast_read(struct ast_channel *chan, int dropaudio, int
 			/* There were no acceptable frames on the readq. */
 			f = &ast_null_frame;
 
-			ast_debug(1, "__ast_read channel '%s'. There were no acceptable frames on the readq\n", ast_channel_name(chan));
+			// ast_debug(1, "__ast_read channel '%s'. There were no acceptable frames on the readq\n", ast_channel_name(chan));
 
 			if (!skipped_dtmf_frame) {
 				/*
@@ -3740,7 +3740,7 @@ static struct ast_frame *__ast_read(struct ast_channel *chan, int dropaudio, int
 					ast_frfree(f);
 					f = &ast_null_frame;
 
-					ast_debug(1, "__ast_read channel '%s'. format that has not been negotiated\n", ast_channel_name(chan));
+					// ast_debug(1, "__ast_read channel '%s'. format that has not been negotiated\n", ast_channel_name(chan));
 
 				} else {
 					f->stream_num = ast_stream_get_position(stream);
@@ -3802,7 +3802,7 @@ static struct ast_frame *__ast_read(struct ast_channel *chan, int dropaudio, int
 
 	if (f) {
 
-		ast_debug(1, "f is known! __ast_read channel '%s'. frameType=%d, dropaudio=%d, dropnondefault=%d\n", ast_channel_name(chan), dropaudio, dropnondefault);
+		// ast_debug(1, "f is known! __ast_read channel '%s'. frameType=%d, dropaudio=%d, dropnondefault=%d\n", ast_channel_name(chan), dropaudio, dropnondefault);
 
 		// struct ast_str *codec_buf = ast_str_alloca(AST_FORMAT_CAP_NAMES_LEN);
 		// /* If media was received from a non-default stream don't perform any actions, let it just go through */
@@ -3838,7 +3838,7 @@ static struct ast_frame *__ast_read(struct ast_channel *chan, int dropaudio, int
 
 		}
 
-		ast_debug(1, "__ast_read channel '%s', entering swith frameType=%d\n", ast_channel_name(chan), f->frametype);
+		// ast_debug(1, "__ast_read channel '%s', entering swith frameType=%d\n", ast_channel_name(chan), f->frametype);
 
 		switch (f->frametype) {
 		case AST_FRAME_CONTROL:
@@ -4311,21 +4311,25 @@ done:
 
 struct ast_frame *ast_read(struct ast_channel *chan)
 {
+	ast_debug(1, "ast_read(%s).\n", ast_channel_name(chan));
 	return __ast_read(chan, 0, 1);
 }
 
 struct ast_frame *ast_read_stream(struct ast_channel *chan)
 {
+	ast_debug(1, "ast_read_stream(%s).\n", ast_channel_name(chan));
 	return __ast_read(chan, 0, 0);
 }
 
 struct ast_frame *ast_read_noaudio(struct ast_channel *chan)
 {
+	ast_debug(1, "ast_read_noaudio(%s).\n", ast_channel_name(chan));
 	return __ast_read(chan, 1, 1);
 }
 
 struct ast_frame *ast_read_stream_noaudio(struct ast_channel *chan)
 {
+	ast_debug(1, "ast_read_stream_noaudio(%s).\n", ast_channel_name(chan));
 	return __ast_read(chan, 1, 0);
 }
 
