@@ -24,6 +24,14 @@ struct ast_sorcery;
 
 struct stir_shaken_certificate;
 
+/*!
+ * \brief Get a STIR/SHAKEN certificate by caller ID number
+ *
+ * \param callier_id_number The caller ID number
+ *
+ * \retval NULL if not found
+ * \retval The certificate on success
+ */
 struct stir_shaken_certificate *stir_shaken_certificate_get_by_caller_id_number(const char *caller_id_number);
 
 /*!
@@ -37,6 +45,26 @@ struct stir_shaken_certificate *stir_shaken_certificate_get_by_caller_id_number(
 const char *stir_shaken_certificate_get_public_key_url(struct stir_shaken_certificate *cert);
 
 /*!
+ * \brief Get the attestation level associated with a certificate
+ *
+ * \param cert The certificate
+ *
+ * \retval NULL on failure
+ * \retval The attestation on success
+ */
+const char *stir_shaken_certificate_get_attestation(struct stir_shaken_certificate *cert);
+
+/*!
+ * \brief Get the origination ID associated with a certificate
+ *
+ * \param cert The certificate
+ *
+ * \retval NULL on failure
+ * \retval The origid on success
+ */
+const char *stir_shaken_certificate_get_origid(struct stir_shaken_certificate *cert);
+
+/*!
  * \brief Get the private key associated with a certificate
  *
  * \param cert The certificate to get the private key from
@@ -45,6 +73,33 @@ const char *stir_shaken_certificate_get_public_key_url(struct stir_shaken_certif
  * \retval The private key on success
  */
 EVP_PKEY *stir_shaken_certificate_get_private_key(struct stir_shaken_certificate *cert);
+
+#ifdef TEST_FRAMEWORK
+
+/*!
+ * \brief Clean up the certificate and mappings set up in test_stir_shaken_init
+ *
+ * \param caller_id_number The caller ID of the certificate to clean up
+ *
+ * \retval non-zero on failure
+ * \retval 0 on success
+ */
+int test_stir_shaken_cleanup_cert(const char *caller_id_number);
+
+/*!
+ * \brief Initialize a test certificate through wizard mappings
+ *
+ * \note test_stir_shaken_cleanup should be called when done with this certificate
+ *
+ * \param caller_id_number The caller ID of the certificate to create
+ * \param file_path The path to the private key for this certificate
+ *
+ * \retval non-zero on failure
+ * \retval 0 on success
+ */
+int test_stir_shaken_create_cert(const char *caller_id_number, const char *file_path);
+
+#endif /* TEST_FRAMEWORK */
 
 /*!
  * \brief Load time initialization for the stir/shaken 'certificate' configuration

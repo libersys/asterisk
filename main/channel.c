@@ -2622,6 +2622,7 @@ static void set_channel_answer_time(struct ast_channel *chan)
 int ast_raw_answer(struct ast_channel *chan)
 {
 	int res = 0;
+	SCOPE_TRACE(1, "%s\n", ast_channel_name(chan));
 
 	ast_channel_lock(chan);
 
@@ -2670,6 +2671,7 @@ int __ast_answer(struct ast_channel *chan, unsigned int delay)
 {
 	int res = 0;
 	enum ast_channel_state old_state;
+	SCOPE_TRACE(1, "%s\n", ast_channel_name(chan));
 
 	old_state = ast_channel_state(chan);
 	if ((res = ast_raw_answer(chan))) {
@@ -2777,6 +2779,7 @@ int __ast_answer(struct ast_channel *chan, unsigned int delay)
 
 int ast_answer(struct ast_channel *chan)
 {
+	SCOPE_TRACE(1, "%s\n", ast_channel_name(chan));
 	return __ast_answer(chan, 0);
 }
 
@@ -3812,7 +3815,12 @@ static struct ast_frame *__ast_read(struct ast_channel *chan, int dropaudio, int
 					break;
 				case AST_FRAME_READ_ACTION_SEND_TEXT:
 					ast_channel_unlock(chan);
-					ast_sendtext(chan, (const char *) read_action_payload->payload);
+					ast_sendtext(chan, (const char *)read_action_payload->payload);
+					ast_channel_lock(chan);
+					break;
+				case AST_FRAME_READ_ACTION_SEND_TEXT_DATA:
+					ast_channel_unlock(chan);
+					ast_sendtext_data(chan, (struct ast_msg_data *)read_action_payload->payload);
 					ast_channel_lock(chan);
 					break;
 				}
@@ -6227,7 +6235,7 @@ static struct ast_channel *request_channel(const char *type, struct ast_format_c
 
 		if (!request_cap && topology) {
 			/* Turn the request stream topology into capabilities */
-			request_cap = tmp_converted_cap = ast_format_cap_from_stream_topology(topology);
+			request_cap = tmp_converted_cap = ast_stream_topology_get_formats(topology);
 		}
 
 		/* find the best audio format to use */

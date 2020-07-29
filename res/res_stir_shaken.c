@@ -32,6 +32,10 @@
 #include "asterisk/astdb.h"
 #include "asterisk/paths.h"
 #include "asterisk/conversions.h"
+#include "asterisk/pbx.h"
+#include "asterisk/global_datastores.h"
+#include "asterisk/app.h"
+#include "asterisk/test.h"
 
 #include "asterisk/res_stir_shaken.h"
 #include "res_stir_shaken/stir_shaken.h"
@@ -60,6 +64,9 @@
 				</configOption>
 				<configOption name="curl_timeout" default="2">
 					<synopsis>Maximum time to wait to CURL certificates</synopsis>
+				</configOption>
+				<configOption name="signature_timeout" default="15">
+					<synopsis>Amount of time a signature is valid for</synopsis>
 				</configOption>
 			</configObject>
 			<configObject name="store">
@@ -92,14 +99,48 @@
 					 Must be a valid http, or https, URL.
 					</para></description>
 				</configOption>
+				<configOption name="attestation">
+					<synopsis>Attestation level</synopsis>
+				</configOption>
+				<configOption name="origid" default="">
+					<synopsis>The origination ID</synopsis>
+				</configOption>
+				<configOption name="caller_id_number" default="">
+					<synopsis>The caller ID number to match on.</synopsis>
+				</configOption>
 			</configObject>
 		</configFile>
 	</configInfo>
+	<function name="STIR_SHAKEN" language="en_US">
+		<synopsis>
+			Gets the number of STIR/SHAKEN results or a specific STIR/SHAKEN value from a result on the channel.
+		</synopsis>
+		<syntax>
+			<parameter name="index" required="true">
+				<para>The index of the STIR/SHAKEN result to get. If only 'count' is passed in, gets the number of STIR/SHAKEN results instead.</para>
+			</parameter>
+			<parameter name="value" required="false">
+				<para>The value to get from the STIR/SHAKEN result. Only used when an index is passed in (instead of 'count'). Allowable values:</para>
+				<enumlist>
+					<enum name = "identity" />
+					<enum name = "attestation" />
+					<enum name = "verify_result" />
+				</enumlist>
+			</parameter>
+		</syntax>
+		<description>
+			<para>This function will either return the number of STIR/SHAKEN identities, or return information on the specified identity.
+			To get the number of identities, just pass 'count' as the only parameter to the function. If you want to get information on a
+			specific STIR/SHAKEN identity, you can get the number of identities and then pass an index as the first parameter and one of
+			the values you would like to retrieve as the second parameter.
+			</para>
+			<example title="Get count and retrieve value">
+			same => n,NoOp(Number of STIR/SHAKEN identities: ${STIR_SHAKEN(count)})
+			same => n,NoOp(Identity ${STIR_SHAKEN(0, identity)} has attestation level ${STIR_SHAKEN(0, attestation)})
+			</example>
+		</description>
+	</function>
  ***/
-
-#define STIR_SHAKEN_ENCRYPTION_ALGORITHM "ES256"
-#define STIR_SHAKEN_PPT "shaken"
-#define STIR_SHAKEN_TYPE "passport"
 
 static struct ast_sorcery *stir_shaken_sorcery;
 
@@ -111,6 +152,11 @@ static struct ast_sorcery *stir_shaken_sorcery;
 
 /* The maximum length for path storage */
 #define MAX_PATH_LEN 256
+
+/* The default amount of time (in seconds) to use for certificate expiration
+ * if no cache data is available
+ */
+#define EXPIRATION_BUFFER 15
 
 struct ast_stir_shaken_payload {
 	/*! The JWT header */
@@ -143,6 +189,158 @@ void ast_stir_shaken_payload_free(struct ast_stir_shaken_payload *payload)
 	ast_free(payload->signature);
 
 	ast_free(payload);
+}
+
+unsigned char *ast_stir_shaken_payload_get_signature(const struct ast_stir_shaken_payload *payload)
+{
+	return payload ? payload->signature : NULL;
+}
+
+char *ast_stir_shaken_payload_get_public_key_url(const struct ast_stir_shaken_payload *payload)
+{
+	return payload ? payload->public_key_url : NULL;
+}
+
+unsigned int ast_stir_shaken_get_signature_timeout(void)
+{
+	return ast_stir_shaken_signature_timeout(stir_shaken_general_get());
+}
+
+/*!
+ * \brief Convert an ast_stir_shaken_verification_result to string representation
+ *
+ * \param result The result to convert
+ *
+ * \retval empty string if not a valid enum value
+ * \retval string representation of result otherwise
+ */
+static const char *stir_shaken_verification_result_to_string(enum ast_stir_shaken_verification_result result)
+{
+	switch (result) {
+		case AST_STIR_SHAKEN_VERIFY_NOT_PRESENT:
+			return "Verification not present";
+		case AST_STIR_SHAKEN_VERIFY_SIGNATURE_FAILED:
+			return "Signature failed";
+		case AST_STIR_SHAKEN_VERIFY_MISMATCH:
+			return "Verification mismatch";
+		case AST_STIR_SHAKEN_VERIFY_PASSED:
+			return "Verification passed";
+		default:
+			break;
+	}
+
+	return "";
+}
+
+/* The datastore struct holding verification information for the channel */
+struct stir_shaken_datastore {
+	/* The identitifier for the STIR/SHAKEN verification */
+	char *identity;
+	/* The attestation value */
+	char *attestation;
+	/* The actual verification result */
+	enum ast_stir_shaken_verification_result verify_result;
+};
+
+/*!
+ * \brief Frees a stir_shaken_datastore structure
+ *
+ * \param datastore The datastore to free
+ */
+static void stir_shaken_datastore_free(struct stir_shaken_datastore *datastore)
+{
+	if (!datastore) {
+		return;
+	}
+
+	ast_free(datastore->identity);
+	ast_free(datastore->attestation);
+	ast_free(datastore);
+}
+
+/*!
+ * \brief The callback to destroy a stir_shaken_datastore
+ *
+ * \param data The stir_shaken_datastore
+ */
+static void stir_shaken_datastore_destroy_cb(void *data)
+{
+	struct stir_shaken_datastore *datastore = data;
+	stir_shaken_datastore_free(datastore);
+}
+
+/* The stir_shaken_datastore info used to add and compare stir_shaken_datastores on the channel */
+static const struct ast_datastore_info stir_shaken_datastore_info = {
+	.type = "STIR/SHAKEN VERIFICATION",
+	.destroy = stir_shaken_datastore_destroy_cb,
+};
+
+int ast_stir_shaken_add_verification(struct ast_channel *chan, const char *identity, const char *attestation,
+	enum ast_stir_shaken_verification_result result)
+{
+	struct stir_shaken_datastore *ss_datastore;
+	struct ast_datastore *datastore;
+	const char *chan_name;
+
+	if (!chan) {
+		ast_log(LOG_ERROR, "Channel is required to add STIR/SHAKEN verification\n");
+		return -1;
+	}
+
+	chan_name = ast_channel_name(chan);
+
+	if (!identity) {
+		ast_log(LOG_ERROR, "No identity to add STIR/SHAKEN verification to channel "
+			"%s\n", chan_name);
+		return -1;
+	}
+
+	if (!attestation) {
+		ast_log(LOG_ERROR, "Attestation cannot be NULL to add STIR/SHAKEN verification to "
+			"channel %s\n", chan_name);
+		return -1;
+	}
+
+	ss_datastore = ast_calloc(1, sizeof(*ss_datastore));
+	if (!ss_datastore) {
+		ast_log(LOG_ERROR, "Failed to allocate space for STIR/SHAKEN datastore for "
+			"channel %s\n", chan_name);
+		return -1;
+	}
+
+	ss_datastore->identity = ast_strdup(identity);
+	if (!ss_datastore->identity) {
+		ast_log(LOG_ERROR, "Failed to allocate space for STIR/SHAKEN datastore "
+			"identity for channel %s\n", chan_name);
+		stir_shaken_datastore_free(ss_datastore);
+		return -1;
+	}
+
+	ss_datastore->attestation = ast_strdup(attestation);
+	if (!ss_datastore->attestation) {
+		ast_log(LOG_ERROR, "Failed to allocate space for STIR/SHAKEN datastore "
+			"attestation for channel %s\n", chan_name);
+		stir_shaken_datastore_free(ss_datastore);
+		return -1;
+	}
+
+	ss_datastore->verify_result = result;
+
+	datastore = ast_datastore_alloc(&stir_shaken_datastore_info, NULL);
+	if (!datastore) {
+		ast_log(LOG_ERROR, "Failed to allocate space for datastore for channel "
+			"%s\n", chan_name);
+		stir_shaken_datastore_free(ss_datastore);
+		return -1;
+	}
+
+	datastore->data = ss_datastore;
+
+	ast_channel_lock(chan);
+	ast_channel_datastore_add(chan, datastore);
+	ast_channel_unlock(chan);
+
+	return 0;
 }
 
 /*!
@@ -186,6 +384,10 @@ static void set_public_key_expiration(const char *public_key_url, const struct c
 			expires_time.tm_isdst = -1;
 			actual_expires.tv_sec = mktime(&expires_time);
 		}
+	}
+
+	if (ast_strlen_zero(value)) {
+		actual_expires.tv_sec += EXPIRATION_BUFFER;
 	}
 
 	snprintf(time_buf, sizeof(time_buf), "%30lu", actual_expires.tv_sec);
@@ -420,8 +622,9 @@ struct ast_stir_shaken_payload *ast_stir_shaken_verify(const char *header, const
 	EVP_PKEY *public_key;
 	char *filename;
 	int curl = 0;
-	struct ast_json_error err;
 	RAII_VAR(char *, file_path, NULL, ast_free);
+	RAII_VAR(char *, combined_str, NULL, ast_free);
+	size_t combined_size;
 
 	if (ast_strlen_zero(header)) {
 		ast_log(LOG_ERROR, "'header' is required for STIR/SHAKEN verification\n");
@@ -524,7 +727,16 @@ struct ast_stir_shaken_payload *ast_stir_shaken_verify(const char *header, const
 		}
 	}
 
-	if (stir_shaken_verify_signature(payload, signature, public_key)) {
+	/* Combine the header and payload to get the original signed message: header.payload */
+	combined_size = strlen(header) + strlen(payload) + 2;
+	combined_str = ast_calloc(1, combined_size);
+	if (!combined_str) {
+		ast_log(LOG_ERROR, "Failed to allocate space for message to verify\n");
+		EVP_PKEY_free(public_key);
+		return NULL;
+	}
+	snprintf(combined_str, combined_size, "%s.%s", header, payload);
+	if (stir_shaken_verify_signature(combined_str, signature, public_key)) {
 		ast_log(LOG_ERROR, "Failed to verify signature\n");
 		EVP_PKEY_free(public_key);
 		return NULL;
@@ -539,14 +751,14 @@ struct ast_stir_shaken_payload *ast_stir_shaken_verify(const char *header, const
 		return NULL;
 	}
 
-	ret_payload->header = ast_json_load_string(header, &err);
+	ret_payload->header = ast_json_load_string(header, NULL);
 	if (!ret_payload->header) {
 		ast_log(LOG_ERROR, "Failed to create JSON from header\n");
 		ast_stir_shaken_payload_free(ret_payload);
 		return NULL;
 	}
 
-	ret_payload->payload = ast_json_load_string(payload, &err);
+	ret_payload->payload = ast_json_load_string(payload, NULL);
 	if (!ret_payload->payload) {
 		ast_log(LOG_ERROR, "Failed to create JSON from payload\n");
 		ast_stir_shaken_payload_free(ret_payload);
@@ -827,14 +1039,19 @@ static int stir_shaken_add_iat(struct ast_json *json)
 
 struct ast_stir_shaken_payload *ast_stir_shaken_sign(struct ast_json *json)
 {
-	struct ast_stir_shaken_payload *payload;
+	struct ast_stir_shaken_payload *ss_payload;
 	unsigned char *signature;
+	const char *public_key_url;
 	const char *caller_id_num;
-	char *json_str = NULL;
+	const char *header;
+	const char *payload;
+	struct ast_json *tmp_json;
+	char *msg = NULL;
+	size_t msg_len;
 	struct stir_shaken_certificate *cert = NULL;
 
-	payload = stir_shaken_verify_json(json);
-	if (!payload) {
+	ss_payload = stir_shaken_verify_json(json);
+	if (!ss_payload) {
 		return NULL;
 	}
 
@@ -854,22 +1071,19 @@ struct ast_stir_shaken_payload *ast_stir_shaken_sign(struct ast_json *json)
 		goto cleanup;
 	}
 
-	if (stir_shaken_add_x5u(json, stir_shaken_certificate_get_public_key_url(cert))) {
+	public_key_url = stir_shaken_certificate_get_public_key_url(cert);
+	if (stir_shaken_add_x5u(json, public_key_url)) {
 		ast_log(LOG_ERROR, "Failed to add 'x5u' (public key URL) to payload\n");
 		goto cleanup;
 	}
+	ss_payload->public_key_url = ast_strdup(public_key_url);
 
-	/* TODO: This is just a placeholder for adding 'attest', 'iat', and
-	 * 'origid' to the payload. Later, additional logic will need to be
-	 * added to determine what these values actually are, but the functions
-	 * themselves are ready to go.
-	 */
-	if (stir_shaken_add_attest(json, "B")) {
+	if (stir_shaken_add_attest(json, stir_shaken_certificate_get_attestation(cert))) {
 		ast_log(LOG_ERROR, "Failed to add 'attest' to payload\n");
 		goto cleanup;
 	}
 
-	if (stir_shaken_add_origid(json, "asterisk")) {
+	if (stir_shaken_add_origid(json, stir_shaken_certificate_get_origid(cert))) {
 		ast_log(LOG_ERROR, "Failed to add 'origid' to payload\n");
 		goto cleanup;
 	}
@@ -879,29 +1093,502 @@ struct ast_stir_shaken_payload *ast_stir_shaken_sign(struct ast_json *json)
 		goto cleanup;
 	}
 
-	json_str = ast_json_dump_string(json);
-	if (!json_str) {
-		ast_log(LOG_ERROR, "Failed to convert JSON to string\n");
+	/* Get the header and the payload. Combine them to get the message to sign */
+	tmp_json = ast_json_object_get(json, "header");
+	header = ast_json_dump_string(tmp_json);
+	tmp_json = ast_json_object_get(json, "payload");
+	payload = ast_json_dump_string(tmp_json);
+	msg_len = strlen(header) + strlen(payload) + 2;
+	msg = ast_calloc(1, msg_len);
+	if (!msg) {
+		ast_log(LOG_ERROR, "Failed to allocate space for message to sign\n");
 		goto cleanup;
 	}
+	snprintf(msg, msg_len, "%s.%s", header, payload);
 
-	signature = stir_shaken_sign(json_str, stir_shaken_certificate_get_private_key(cert));
+	signature = stir_shaken_sign(msg, stir_shaken_certificate_get_private_key(cert));
 	if (!signature) {
 		goto cleanup;
 	}
 
-	payload->signature = signature;
+	ss_payload->signature = signature;
 	ao2_cleanup(cert);
-	ast_json_free(json_str);
+	ast_free(msg);
 
-	return payload;
+	return ss_payload;
 
 cleanup:
 	ao2_cleanup(cert);
-	ast_stir_shaken_payload_free(payload);
-	ast_json_free(json_str);
+	ast_stir_shaken_payload_free(ss_payload);
+	ast_free(msg);
 	return NULL;
 }
+
+/*!
+ * \brief Retrieves STIR/SHAKEN verification information for the channel via dialplan.
+ * Examples:
+ *
+ * STIR_SHAKEN(count)
+ * STIR_SHAKEN(0, identity)
+ * STIR_SHAKEN(1, attestation)
+ * STIR_SHAKEN(27, verify_result)
+ *
+ * \retval -1 on failure
+ * \retval 0 on success
+ */
+static int stir_shaken_read(struct ast_channel *chan, const char *function,
+	char *data, char *buf, size_t len)
+{
+	struct stir_shaken_datastore *ss_datastore;
+	struct ast_datastore *datastore;
+	char *parse;
+	char *first;
+	char *second;
+	unsigned int target_index, current_index = 0;
+	AST_DECLARE_APP_ARGS(args,
+		AST_APP_ARG(first_param);
+		AST_APP_ARG(second_param);
+	);
+
+	if (ast_strlen_zero(data)) {
+		ast_log(LOG_WARNING, "%s requires at least one argument\n", function);
+		return -1;
+	}
+
+	if (!chan) {
+		ast_log(LOG_ERROR, "No channel for %s function\n", function);
+		return -1;
+	}
+
+	parse = ast_strdupa(data);
+
+	AST_STANDARD_APP_ARGS(args, parse);
+
+	first = ast_strip(args.first_param);
+	if (ast_strlen_zero(first)) {
+		ast_log(LOG_ERROR, "An argument must be passed to %s\n", function);
+		return -1;
+	}
+
+	second = ast_strip(args.second_param);
+
+	/* Check if we are only looking for the number of STIR/SHAKEN verification results */
+	if (!strcasecmp(first, "count")) {
+
+		size_t count = 0;
+
+		if (!ast_strlen_zero(second)) {
+			ast_log(LOG_ERROR, "%s only takes 1 paramater for 'count'\n", function);
+			return -1;
+		}
+
+		ast_channel_lock(chan);
+		AST_LIST_TRAVERSE(ast_channel_datastores(chan), datastore, entry) {
+			if (datastore->info != &stir_shaken_datastore_info) {
+				continue;
+			}
+			count++;
+		}
+		ast_channel_unlock(chan);
+
+		snprintf(buf, len, "%zu", count);
+		return 0;
+	}
+
+	/* If we aren't doing a count, then there should be two parameters. The field
+	 * we are searching for will be the second parameter. The index is the first.
+	 */
+	if (ast_strlen_zero(second)) {
+		ast_log(LOG_ERROR, "Retrieving a value using %s requires two paramaters (index, value) "
+			"- only index was given (%s)\n", function, second);
+		return -1;
+	}
+
+	if (ast_str_to_uint(first, &target_index)) {
+		ast_log(LOG_ERROR, "Failed to convert index %s to integer for function %s\n",
+			first, function);
+		return -1;
+	}
+
+	/* We don't store by uid for the datastore, so just search for the specified index */
+	ast_channel_lock(chan);
+	AST_LIST_TRAVERSE(ast_channel_datastores(chan), datastore, entry) {
+		if (datastore->info != &stir_shaken_datastore_info) {
+			continue;
+		}
+
+		if (current_index == target_index) {
+			break;
+		}
+
+		current_index++;
+	}
+	ast_channel_unlock(chan);
+	if (current_index != target_index || !datastore) {
+		ast_log(LOG_WARNING, "No STIR/SHAKEN results for index '%s'\n", first);
+		return -1;
+	}
+	ss_datastore = datastore->data;
+
+	if (!strcasecmp(second, "identity")) {
+		ast_copy_string(buf, ss_datastore->identity, len);
+	} else if (!strcasecmp(second, "attestation")) {
+		ast_copy_string(buf, ss_datastore->attestation, len);
+	} else if (!strcasecmp(second, "verify_result")) {
+		ast_copy_string(buf, stir_shaken_verification_result_to_string(ss_datastore->verify_result), len);
+	} else {
+		ast_log(LOG_ERROR, "No such value '%s' for %s\n", second, function);
+		return -1;
+	}
+
+	return 0;
+}
+
+static struct ast_custom_function stir_shaken_function = {
+	.name = "STIR_SHAKEN",
+	.read = stir_shaken_read,
+};
+
+#ifdef TEST_FRAMEWORK
+
+static void test_stir_shaken_add_fake_astdb_entry(const char *public_key_url, const char *file_path)
+{
+	struct timeval expires = ast_tvnow();
+	char time_buf[32];
+	char hash[41];
+
+	ast_sha1_hash(hash, public_key_url);
+	add_public_key_to_astdb(public_key_url, file_path);
+	snprintf(time_buf, sizeof(time_buf), "%30lu", expires.tv_sec + 300);
+
+	ast_db_put(hash, "expiration", time_buf);
+}
+
+/*!
+ * \brief Create a private or public key certificate
+ *
+ * \param file_path The path of the file to create
+ * \param private Set to 0 if public, 1 if private
+ *
+ * \retval -1 on failure
+ * \retval 0 on success
+ */
+static int test_stir_shaken_write_temp_key(char *file_path, int private)
+{
+	FILE *file;
+	int fd;
+	char *data;
+	char *type = private ? "private" : "public";
+	char *private_data =
+		"-----BEGIN EC PRIVATE KEY-----\n"
+		"MHcCAQEEIFkNGlrmRky2j7wmjGBGoPFBsyEQELmEYN02BiiG508noAoGCCqGSM49\n"
+		"AwEHoUQDQgAECwCaeAYwVG/FAnEnkwaucz6o047iSWq3cJBBUc0n2ZlUDr5VywAz\n"
+		"MZ86EthIqF3CGZjhLHn0xRITXYwfqTtWBw==\n"
+		"-----END EC PRIVATE KEY-----";
+	char *public_data =
+		"-----BEGIN PUBLIC KEY-----\n"
+		"MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAECwCaeAYwVG/FAnEnkwaucz6o047i\n"
+		"SWq3cJBBUc0n2ZlUDr5VywAzMZ86EthIqF3CGZjhLHn0xRITXYwfqTtWBw==\n"
+		"-----END PUBLIC KEY-----";
+
+	fd = mkstemp(file_path);
+	if (fd < 0) {
+		ast_log(LOG_ERROR, "Failed to create temp %s file: %s\n", type, strerror(errno));
+		return -1;
+	}
+
+	file = fdopen(fd, "w");
+	if (!file) {
+		ast_log(LOG_ERROR, "Failed to create temp %s key file: %s\n", type, strerror(errno));
+		return -1;
+	}
+
+	data = private ? private_data : public_data;
+	if (fputs(data, file) == EOF) {
+		ast_log(LOG_ERROR, "Failed to write temp %s key file\n", type);
+		fclose(file);
+		return -1;
+	}
+
+	fclose(file);
+
+	return 0;
+}
+
+AST_TEST_DEFINE(test_stir_shaken_sign)
+{
+	char *caller_id_number = "1234567";
+	char file_path[] = "/tmp/stir_shaken_private.XXXXXX";
+	RAII_VAR(char *, rm_on_exit, file_path, unlink);
+	RAII_VAR(struct ast_json *, json, NULL, ast_json_free);
+	RAII_VAR(struct ast_stir_shaken_payload *, payload, NULL, ast_stir_shaken_payload_free);
+
+	switch (cmd) {
+	case TEST_INIT:
+		info->name = "stir_shaken_sign";
+		info->category = "/res/res_stir_shaken/";
+		info->summary = "STIR/SHAKEN sign unit test";
+		info->description =
+			"Tests signing a JWT with a private key.";
+		return AST_TEST_NOT_RUN;
+	case TEST_EXECUTE:
+		break;
+	}
+
+	/* We only need a private key to sign */
+	test_stir_shaken_write_temp_key(file_path, 1);
+	test_stir_shaken_create_cert(caller_id_number, file_path);
+
+	/* Test missing header section */
+	json = ast_json_pack("{s: {s: {s: s}}}", "payload", "orig", "tn", caller_id_number);
+	payload = ast_stir_shaken_sign(json);
+	if (payload) {
+		ast_test_status_update(test, "Signed an invalid JWT (missing 'header')\n");
+		test_stir_shaken_cleanup_cert(caller_id_number);
+		return AST_TEST_FAIL;
+	}
+
+	/* Test missing payload section */
+	ast_json_free(json);
+	json = ast_json_pack("{s: {s: s, s: s, s: s, s: s}}", "header", "alg",
+		STIR_SHAKEN_ENCRYPTION_ALGORITHM, "ppt", STIR_SHAKEN_PPT, "typ", STIR_SHAKEN_TYPE,
+		"x5u", "http://testing123");
+	payload = ast_stir_shaken_sign(json);
+	if (payload) {
+		ast_test_status_update(test, "Signed an invalid JWT (missing 'payload')\n");
+		test_stir_shaken_cleanup_cert(caller_id_number);
+		return AST_TEST_FAIL;
+	}
+
+	/* Test missing alg section */
+	ast_json_free(json);
+	json = ast_json_pack("{s: {s: s, s: s, s: s}, s: {s: {s: s}}}", "header", "ppt",
+		STIR_SHAKEN_PPT, "typ", STIR_SHAKEN_TYPE, "x5u", "http://testing123", "payload",
+		"orig", "tn", caller_id_number);
+	payload = ast_stir_shaken_sign(json);
+	if (payload) {
+		ast_test_status_update(test, "Signed an invalid JWT (missing 'alg')\n");
+		test_stir_shaken_cleanup_cert(caller_id_number);
+		return AST_TEST_FAIL;
+	}
+
+	/* Test invalid alg value */
+	ast_json_free(json);
+	json = ast_json_pack("{s: {s: s, s: s, s: s, s: s}, s: {s: {s: s}}}", "header", "alg",
+		"invalid algorithm", "ppt", STIR_SHAKEN_PPT, "typ", STIR_SHAKEN_TYPE,
+		"x5u", "http://testing123", "payload", "orig", "tn", caller_id_number);
+	payload = ast_stir_shaken_sign(json);
+	if (payload) {
+		ast_test_status_update(test, "Signed an invalid JWT (wrong 'alg')\n");
+		test_stir_shaken_cleanup_cert(caller_id_number);
+		return AST_TEST_FAIL;
+	}
+
+	/* Test missing ppt section */
+	ast_json_free(json);
+	json = ast_json_pack("{s: {s: s, s: s, s: s}, s: {s: {s: s}}}", "header", "alg",
+		STIR_SHAKEN_ENCRYPTION_ALGORITHM, "typ", STIR_SHAKEN_TYPE, "x5u", "http://testing123",
+		"payload", "orig", "tn", caller_id_number);
+	payload = ast_stir_shaken_sign(json);
+	if (payload) {
+		ast_test_status_update(test, "Signed an invalid JWT (missing 'ppt')\n");
+		test_stir_shaken_cleanup_cert(caller_id_number);
+		return AST_TEST_FAIL;
+	}
+
+	/* Test invalid ppt value */
+	ast_json_free(json);
+	json = ast_json_pack("{s: {s: s, s: s, s: s, s: s}, s: {s: {s: s}}}", "header", "alg",
+		STIR_SHAKEN_ENCRYPTION_ALGORITHM, "ppt", "invalid ppt", "typ", STIR_SHAKEN_TYPE,
+		"x5u", "http://testing123", "payload", "orig", "tn", caller_id_number);
+	payload = ast_stir_shaken_sign(json);
+	if (payload) {
+		ast_test_status_update(test, "Signed an invalid JWT (wrong 'ppt')\n");
+		test_stir_shaken_cleanup_cert(caller_id_number);
+		return AST_TEST_FAIL;
+	}
+
+	/* Test missing typ section */
+	ast_json_free(json);
+	json = ast_json_pack("{s: {s: s, s: s, s: s}, s: {s: {s: s}}}", "header", "alg",
+		STIR_SHAKEN_ENCRYPTION_ALGORITHM, "ppt", STIR_SHAKEN_PPT, "x5u", "http://testing123",
+		"payload", "orig", "tn", caller_id_number);
+	payload = ast_stir_shaken_sign(json);
+	if (payload) {
+		ast_test_status_update(test, "Signed an invalid JWT (missing 'typ')\n");
+		test_stir_shaken_cleanup_cert(caller_id_number);
+		return AST_TEST_FAIL;
+	}
+
+	/* Test invalid typ value */
+	ast_json_free(json);
+	json = ast_json_pack("{s: {s: s, s: s, s: s, s: s}, s: {s: {s: s}}}", "header", "alg",
+		STIR_SHAKEN_ENCRYPTION_ALGORITHM, "ppt", STIR_SHAKEN_PPT, "typ", "invalid typ",
+		"x5u", "http://testing123", "payload", "orig", "tn", caller_id_number);
+	payload = ast_stir_shaken_sign(json);
+	if (payload) {
+		ast_test_status_update(test, "Signed an invalid JWT (wrong 'typ')\n");
+		test_stir_shaken_cleanup_cert(caller_id_number);
+		return AST_TEST_FAIL;
+	}
+
+	/* Test missing orig section */
+	ast_json_free(json);
+	json = ast_json_pack("{s: {s: s, s: s, s: s, s: s}, s: {s: s}}", "header", "alg",
+		STIR_SHAKEN_ENCRYPTION_ALGORITHM, "ppt", STIR_SHAKEN_PPT, "typ", STIR_SHAKEN_TYPE,
+		"x5u", "http://testing123", "payload", "filler", "filler");
+	payload = ast_stir_shaken_sign(json);
+	if (payload) {
+		ast_test_status_update(test, "Signed an invalid JWT (missing 'orig')\n");
+		test_stir_shaken_cleanup_cert(caller_id_number);
+		return AST_TEST_FAIL;
+	}
+
+	/* Test missing tn section */
+	ast_json_free(json);
+	json = ast_json_pack("{s: {s: s, s: s, s: s, s: s}, s: {s: s}}", "header", "alg",
+		STIR_SHAKEN_ENCRYPTION_ALGORITHM, "ppt", STIR_SHAKEN_PPT, "typ", STIR_SHAKEN_TYPE,
+		"x5u", "http://testing123", "payload", "orig", "filler");
+	payload = ast_stir_shaken_sign(json);
+	if (payload) {
+		ast_test_status_update(test, "Signed an invalid JWT (missing 'tn')\n");
+		test_stir_shaken_cleanup_cert(caller_id_number);
+		return AST_TEST_FAIL;
+	}
+
+	/* Test valid JWT */
+	ast_json_free(json);
+	json = ast_json_pack("{s: {s: s, s: s, s: s, s: s}, s: {s: {s: s}}}", "header", "alg",
+		STIR_SHAKEN_ENCRYPTION_ALGORITHM, "ppt", STIR_SHAKEN_PPT, "typ", STIR_SHAKEN_TYPE,
+		"x5u", "http://testing123", "payload", "orig", "tn", caller_id_number);
+	payload = ast_stir_shaken_sign(json);
+	if (!payload) {
+		ast_test_status_update(test, "Failed to sign a valid JWT\n");
+		test_stir_shaken_cleanup_cert(caller_id_number);
+		return AST_TEST_FAIL;
+	}
+
+	test_stir_shaken_cleanup_cert(caller_id_number);
+
+	return AST_TEST_PASS;
+}
+
+AST_TEST_DEFINE(test_stir_shaken_verify)
+{
+	char *caller_id_number = "1234567";
+	char *public_key_url = "http://testing123";
+	char *header;
+	char *payload;
+	struct ast_json *tmp_json;
+	char public_path[] = "/tmp/stir_shaken_public.XXXXXX";
+	char private_path[] = "/tmp/stir_shaken_public.XXXXXX";
+	RAII_VAR(char *, rm_on_exit_public, public_path, unlink);
+	RAII_VAR(char *, rm_on_exit_private, private_path, unlink);
+	RAII_VAR(struct ast_json *, json, NULL, ast_json_free);
+	RAII_VAR(struct ast_stir_shaken_payload *, signed_payload, NULL, ast_stir_shaken_payload_free);
+	RAII_VAR(struct ast_stir_shaken_payload *, returned_payload, NULL, ast_stir_shaken_payload_free);
+
+	switch (cmd) {
+	case TEST_INIT:
+		info->name = "stir_shaken_verify";
+		info->category = "/res/res_stir_shaken/";
+		info->summary = "STIR/SHAKEN verify unit test";
+		info->description =
+			"Tests verifying a signature with a public key";
+		return AST_TEST_NOT_RUN;
+	case TEST_EXECUTE:
+		break;
+	}
+
+	/* We need the private key to sign, but we also need the corresponding
+	 * public key to verify */
+	test_stir_shaken_write_temp_key(public_path, 0);
+	test_stir_shaken_write_temp_key(private_path, 1);
+	test_stir_shaken_create_cert(caller_id_number, private_path);
+
+	/* Get the signature */
+	json = ast_json_pack("{s: {s: s, s: s, s: s, s: s}, s: {s: {s: s}}}", "header", "alg",
+		STIR_SHAKEN_ENCRYPTION_ALGORITHM, "ppt", STIR_SHAKEN_PPT, "typ", STIR_SHAKEN_TYPE,
+		"x5u", public_key_url, "payload", "orig", "tn", caller_id_number);
+	signed_payload = ast_stir_shaken_sign(json);
+	if (!signed_payload) {
+		ast_test_status_update(test, "Failed to sign a valid JWT\n");
+		test_stir_shaken_cleanup_cert(caller_id_number);
+		return AST_TEST_FAIL;
+	}
+
+	/* Get the header and payload for ast_stir_shaken_verify */
+	tmp_json = ast_json_object_get(json, "header");
+	header = ast_json_dump_string(tmp_json);
+	tmp_json = ast_json_object_get(json, "payload");
+	payload = ast_json_dump_string(tmp_json);
+
+	/* Test empty header parameter */
+	returned_payload = ast_stir_shaken_verify("", payload, (const char *)signed_payload->signature,
+		STIR_SHAKEN_ENCRYPTION_ALGORITHM, public_key_url);
+	if (returned_payload) {
+		ast_test_status_update(test, "Verified a signature with missing 'header'\n");
+		test_stir_shaken_cleanup_cert(caller_id_number);
+		return AST_TEST_FAIL;
+	}
+
+	/* Test empty payload parameter */
+	returned_payload = ast_stir_shaken_verify(header, "", (const char *)signed_payload->signature,
+		STIR_SHAKEN_ENCRYPTION_ALGORITHM, public_key_url);
+	if (returned_payload) {
+		ast_test_status_update(test, "Verified a signature with missing 'payload'\n");
+		test_stir_shaken_cleanup_cert(caller_id_number);
+		return AST_TEST_FAIL;
+	}
+
+	/* Test empty signature parameter */
+	returned_payload = ast_stir_shaken_verify(header, payload, "",
+		STIR_SHAKEN_ENCRYPTION_ALGORITHM, public_key_url);
+	if (returned_payload) {
+		ast_test_status_update(test, "Verified a signature with missing 'signature'\n");
+		test_stir_shaken_cleanup_cert(caller_id_number);
+		return AST_TEST_FAIL;
+	}
+
+	/* Test empty algorithm parameter */
+	returned_payload = ast_stir_shaken_verify(header, payload, (const char *)signed_payload->signature,
+		"", public_key_url);
+	if (returned_payload) {
+		ast_test_status_update(test, "Verified a signature with missing 'algorithm'\n");
+		test_stir_shaken_cleanup_cert(caller_id_number);
+		return AST_TEST_FAIL;
+	}
+
+	/* Test empty public key URL */
+	returned_payload = ast_stir_shaken_verify(header, payload, (const char *)signed_payload->signature,
+		STIR_SHAKEN_ENCRYPTION_ALGORITHM, "");
+	if (returned_payload) {
+		ast_test_status_update(test, "Verified a signature with missing 'public key URL'\n");
+		test_stir_shaken_cleanup_cert(caller_id_number);
+		return AST_TEST_FAIL;
+	}
+
+	/* Trick the function into thinking we've already downloaded the key */
+	test_stir_shaken_add_fake_astdb_entry(public_key_url, public_path);
+
+	/* Verify a valid signature */
+	returned_payload = ast_stir_shaken_verify(header, payload, (const char *)signed_payload->signature,
+		STIR_SHAKEN_ENCRYPTION_ALGORITHM, public_key_url);
+	if (!returned_payload) {
+		ast_test_status_update(test, "Failed to verify a valid signature\n");
+		remove_public_key_from_astdb(public_key_url);
+		test_stir_shaken_cleanup_cert(caller_id_number);
+		return AST_TEST_FAIL;
+	}
+
+	remove_public_key_from_astdb(public_key_url);
+
+	test_stir_shaken_cleanup_cert(caller_id_number);
+
+	return AST_TEST_PASS;
+}
+
+#endif /* TEST_FRAMEWORK */
 
 static int reload_module(void)
 {
@@ -914,6 +1601,8 @@ static int reload_module(void)
 
 static int unload_module(void)
 {
+	int res = 0;
+
 	stir_shaken_certificate_unload();
 	stir_shaken_store_unload();
 	stir_shaken_general_unload();
@@ -921,11 +1610,18 @@ static int unload_module(void)
 	ast_sorcery_unref(stir_shaken_sorcery);
 	stir_shaken_sorcery = NULL;
 
-	return 0;
+	res |= ast_custom_function_unregister(&stir_shaken_function);
+
+	AST_TEST_UNREGISTER(test_stir_shaken_sign);
+	AST_TEST_UNREGISTER(test_stir_shaken_verify);
+
+	return res;
 }
 
 static int load_module(void)
 {
+	int res = 0;
+
 	if (!(stir_shaken_sorcery = ast_sorcery_open())) {
 		ast_log(LOG_ERROR, "stir/shaken - failed to open sorcery\n");
 		return AST_MODULE_LOAD_DECLINE;
@@ -948,7 +1644,12 @@ static int load_module(void)
 
 	ast_sorcery_load(ast_stir_shaken_sorcery());
 
-	return AST_MODULE_LOAD_SUCCESS;
+	res |= ast_custom_function_register(&stir_shaken_function);
+
+	AST_TEST_REGISTER(test_stir_shaken_sign);
+	AST_TEST_REGISTER(test_stir_shaken_verify);
+
+	return res;
 }
 
 AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_GLOBAL_SYMBOLS | AST_MODFLAG_LOAD_ORDER,

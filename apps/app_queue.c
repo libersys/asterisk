@@ -1463,34 +1463,34 @@ static char *app_qupd = "QueueUpdate";
 static const char * const pm_family = "Queue/PersistentMembers";
 
 /*! \brief queues.conf [general] option */
-static int queue_persistent_members = 0;
+static int queue_persistent_members;
 
-/*! \brief queues.conf per-queue weight option */
-static int use_weight = 0;
-
-/*! \brief queues.conf [general] option */
-static int autofill_default = 1;
+/*! \brief Records that one or more queues use weight */
+static int use_weight;
 
 /*! \brief queues.conf [general] option */
-static int montype_default = 0;
+static int autofill_default;
 
 /*! \brief queues.conf [general] option */
-static int shared_lastcall = 0;
+static int montype_default;
+
+/*! \brief queues.conf [general] option */
+static int shared_lastcall;
 
 /*! \brief queuesrules.conf [general] option */
-static int realtime_rules = 0;
+static int realtime_rules;
 
 /*! \brief Subscription to device state change messages */
 static struct stasis_subscription *device_state_sub;
 
 /*! \brief queues.conf [general] option */
-static int update_cdr = 0;
+static int update_cdr;
 
 /*! \brief queues.conf [general] option */
-static int negative_penalty_invalid = 0;
+static int negative_penalty_invalid;
 
 /*! \brief queues.conf [general] option */
-static int log_membername_as_agent = 0;
+static int log_membername_as_agent;
 
 /*! \brief name of the ringinuse field in the realtime database */
 static char *realtime_ringinuse_field;
@@ -1543,8 +1543,6 @@ struct callattempt {
 	struct ast_channel *chan;
 	char interface[256];			/*!< An Asterisk dial string (not a channel name) */
 	int metric;
-	time_t lastcall;
-	struct call_queue *lastqueue;
 	struct member *member;
 	/*! Saved connected party info from an AST_CONTROL_CONNECTED_LINE. */
 	struct ast_party_connected_line connected;
@@ -4386,42 +4384,43 @@ static int member_status_available(int status)
  */
 static int can_ring_entry(struct queue_ent *qe, struct callattempt *call)
 {
+	struct member *memberp = call->member;
 	int wrapuptime;
 
-	if (call->member->paused) {
+	if (memberp->paused) {
 		ast_debug(1, "%s paused, can't receive call\n", call->interface);
 		return 0;
 	}
 
-	if (!call->member->ringinuse && !member_status_available(call->member->status)) {
+	if (!memberp->ringinuse && !member_status_available(memberp->status)) {
 		ast_debug(1, "%s not available, can't receive call\n", call->interface);
 		return 0;
 	}
 
-	if (call->lastqueue) {
-		wrapuptime = get_wrapuptime(call->lastqueue, call->member);
+	if (memberp->lastqueue) {
+		wrapuptime = get_wrapuptime(memberp->lastqueue, memberp);
 	} else {
-		wrapuptime = get_wrapuptime(qe->parent, call->member);
+		wrapuptime = get_wrapuptime(qe->parent, memberp);
 	}
-	if (wrapuptime && time(NULL) - call->lastcall < wrapuptime) {
+	if (wrapuptime && (time(NULL) - memberp->lastcall) < wrapuptime) {
 		ast_debug(1, "Wrapuptime not yet expired on queue %s for %s\n",
-			(call->lastqueue ? call->lastqueue->name : qe->parent->name),
+			(memberp->lastqueue ? memberp->lastqueue->name : qe->parent->name),
 			call->interface);
 		return 0;
 	}
 
-	if (use_weight && compare_weight(qe->parent, call->member)) {
+	if (use_weight && compare_weight(qe->parent, memberp)) {
 		ast_debug(1, "Priority queue delaying call to %s:%s\n",
 			qe->parent->name, call->interface);
 		return 0;
 	}
 
-	if (!call->member->ringinuse) {
+	if (!memberp->ringinuse) {
 		struct member *mem;
 
 		ao2_lock(pending_members);
 
-		mem = ao2_find(pending_members, call->member,
+		mem = ao2_find(pending_members, memberp,
 				  OBJ_SEARCH_OBJECT | OBJ_NOLOCK);
 		if (mem) {
 			/*
@@ -4439,8 +4438,8 @@ static int can_ring_entry(struct queue_ent *qe, struct callattempt *call)
 		 * If not found add it to the container so another queue
 		 * won't attempt to call this member at the same time.
 		 */
-		ast_debug(3, "Add %s to pending_members\n", call->member->membername);
-		ao2_link(pending_members, call->member);
+		ast_debug(3, "Add %s to pending_members\n", memberp->membername);
+		ao2_link(pending_members, memberp);
 		ao2_unlock(pending_members);
 
 		/*
@@ -4448,10 +4447,10 @@ static int can_ring_entry(struct queue_ent *qe, struct callattempt *call)
 		 * because the device state and extension state callbacks may
 		 * not have updated the status yet.
 		 */
-		if (!member_status_available(get_queue_member_status(call->member))) {
+		if (!member_status_available(get_queue_member_status(memberp))) {
 			ast_debug(1, "%s actually not available, can't receive call\n",
 				call->interface);
-			pending_members_remove(call->member);
+			pending_members_remove(memberp);
 			return 0;
 		}
 	}
@@ -6854,9 +6853,7 @@ static int try_calling(struct queue_ent *qe, struct ast_flags opts, char **opt_a
 
 		tmp->block_connected_update = block_connected_line;
 		tmp->stillgoing = 1;
-		tmp->member = cur;/* Place the reference for cur into callattempt. */
-		tmp->lastcall = cur->lastcall;
-		tmp->lastqueue = cur->lastqueue;
+		tmp->member = cur; /* Place the reference for cur into callattempt. */
 		ast_copy_string(tmp->interface, cur->interface, sizeof(tmp->interface));
 		/* Calculate the metric for the appropriate strategy. */
 		if (!calc_metric(qe->parent, cur, x++, qe, tmp)) {
@@ -6865,9 +6862,6 @@ static int try_calling(struct queue_ent *qe, struct ast_flags opts, char **opt_a
 			   hung up XXX */
 			tmp->q_next = outgoing;
 			outgoing = tmp;
-			/* If this line is up, don't try anybody else */
-			if (outgoing->chan && (ast_channel_state(outgoing->chan) == AST_STATE_UP))
-				break;
 		} else {
 			callattempt_free(tmp);
 		}
@@ -9116,14 +9110,19 @@ static struct ast_custom_function queuememberpenalty_function = {
 	.write = queue_function_memberpenalty_write,
 };
 
+/*! Reset the global queue rules parameters even if there is no "general" section of queuerules.conf */
+static void queue_rules_reset_global_params(void)
+{
+	realtime_rules = 0;
+}
+
 /*! Set the global queue rules parameters as defined in the "general" section of queuerules.conf */
 static void queue_rules_set_global_params(struct ast_config *cfg)
 {
-        const char *general_val = NULL;
-        realtime_rules = 0;
-        if ((general_val = ast_variable_retrieve(cfg, "general", "realtime_rules"))) {
-                realtime_rules = ast_true(general_val);
-        }
+	const char *general_val = NULL;
+	if ((general_val = ast_variable_retrieve(cfg, "general", "realtime_rules"))) {
+		realtime_rules = ast_true(general_val);
+	}
 }
 
 /*! \brief Reload the rules defined in queuerules.conf
@@ -9158,6 +9157,7 @@ static int reload_queue_rules(int reload)
 			ast_free(pr_iter);
 		ast_free(rl_iter);
 	}
+	queue_rules_reset_global_params();
 	while ((rulecat = ast_category_browse(cfg, rulecat))) {
 		if (!strcasecmp(rulecat, "general")) {
 			queue_rules_set_global_params(cfg);
@@ -9189,36 +9189,41 @@ static int reload_queue_rules(int reload)
 	return AST_MODULE_LOAD_SUCCESS;
 }
 
+/*! Always set the global queue defaults, even if there is no "general" section in queues.conf */
+static void queue_reset_global_params(void)
+{
+	queue_persistent_members = 0;
+	autofill_default = 0;
+	montype_default = 0;
+	update_cdr = 0;
+	shared_lastcall = 0;
+	negative_penalty_invalid = 0;
+	log_membername_as_agent = 0;
+}
+
 /*! Set the global queue parameters as defined in the "general" section of queues.conf */
 static void queue_set_global_params(struct ast_config *cfg)
 {
 	const char *general_val = NULL;
-	queue_persistent_members = 0;
 	if ((general_val = ast_variable_retrieve(cfg, "general", "persistentmembers"))) {
 		queue_persistent_members = ast_true(general_val);
 	}
-	autofill_default = 0;
 	if ((general_val = ast_variable_retrieve(cfg, "general", "autofill"))) {
 		autofill_default = ast_true(general_val);
 	}
-	montype_default = 0;
 	if ((general_val = ast_variable_retrieve(cfg, "general", "monitor-type"))) {
 		if (!strcasecmp(general_val, "mixmonitor"))
 			montype_default = 1;
 	}
-	update_cdr = 0;
 	if ((general_val = ast_variable_retrieve(cfg, "general", "updatecdr"))) {
 		update_cdr = ast_true(general_val);
 	}
-	shared_lastcall = 0;
 	if ((general_val = ast_variable_retrieve(cfg, "general", "shared_lastcall"))) {
 		shared_lastcall = ast_true(general_val);
 	}
-	negative_penalty_invalid = 0;
 	if ((general_val = ast_variable_retrieve(cfg, "general", "negative_penalty_invalid"))) {
 		negative_penalty_invalid = ast_true(general_val);
 	}
-	log_membername_as_agent = 0;
 	if ((general_val = ast_variable_retrieve(cfg, "general", "log_membername_as_agent"))) {
 		log_membername_as_agent = ast_true(general_val);
 	}
@@ -9553,6 +9558,7 @@ static int reload_queues(int reload, struct ast_flags *mask, const char *queuena
 
 	/* Chug through config file. */
 	cat = NULL;
+	queue_reset_global_params();
 	while ((cat = ast_category_browse(cfg, cat)) ) {
 		if (!strcasecmp(cat, "general") && queue_reload) {
 			queue_set_global_params(cfg);

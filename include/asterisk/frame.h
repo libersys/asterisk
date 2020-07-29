@@ -335,9 +335,16 @@ enum ast_control_frame_type {
 	AST_CONTROL_RECORD_MUTE = 1103,	/*!< Indicated to a channel in record to mute/unmute (i.e. write silence) recording */
 };
 
+/*!
+ * \brief Actions to indicate to, and be handled on channel read
+ *
+ * The subtype to specify for an AST_CONTROL_READ_ACTION frame. These
+ * frames are then to be enacted on within a channel's read thread.
+ */
 enum ast_frame_read_action {
 	AST_FRAME_READ_ACTION_CONNECTED_LINE_MACRO,
 	AST_FRAME_READ_ACTION_SEND_TEXT,
+	AST_FRAME_READ_ACTION_SEND_TEXT_DATA,
 };
 
 struct ast_control_read_action_payload {
@@ -628,9 +635,10 @@ int ast_frame_clear(struct ast_frame *frame);
  * \param slen Length of subclass buffer
  * \param moreinfo Buffer to fill with additional information
  * \param mlen Length of moreinfo buffer
+ * \return Pointer to subclass
  * \since 11
  */
-void ast_frame_subclass2str(struct ast_frame *f, char *subclass, size_t slen, char *moreinfo, size_t mlen);
+char *ast_frame_subclass2str(struct ast_frame *f, char *subclass, size_t slen, char *moreinfo, size_t mlen);
 
 /*!
  * \brief Copy the discription of a frame type into the provided string
@@ -638,9 +646,10 @@ void ast_frame_subclass2str(struct ast_frame *f, char *subclass, size_t slen, ch
  * \param frame_type The frame type to be described
  * \param ftype Buffer to fill with frame type description
  * \param len Length of subclass buffer
+ * \return Pointer to ftype
  * \since 11
  */
-void ast_frame_type2str(enum ast_frame_type frame_type, char *ftype, size_t len);
+char *ast_frame_type2str(enum ast_frame_type frame_type, char *ftype, size_t len);
 
 #if defined(__cplusplus) || defined(c_plusplus)
 }

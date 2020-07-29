@@ -49,6 +49,19 @@
 /* Needed for ast_sip_for_each_channel_snapshot struct */
 #include "asterisk/stasis_channels.h"
 #include "asterisk/stasis_endpoints.h"
+#include "asterisk/stream.h"
+
+#define PJSIP_MINVERSION(m,n,p) (((m << 24) | (n << 16) | (p << 8)) >= PJ_VERSION_NUM)
+
+#ifndef PJSIP_EXPIRES_NOT_SPECIFIED
+/*
+ * Added in pjproject 2.10.0. However define here if someone compiles against a
+ * version of pjproject < 2.10.0.
+ *
+ * Usually defined in pjsip/include/pjsip/sip_msg.h (included as part of <pjsip.h>)
+ */
+#define PJSIP_EXPIRES_NOT_SPECIFIED	((pj_uint32_t)-1)
+#endif
 
 /* Forward declarations of PJSIP stuff */
 struct pjsip_rx_data;
@@ -790,6 +803,14 @@ struct ast_sip_endpoint_media_configuration {
 	struct ast_flags incoming_call_offer_pref;
 	/*! Codec preference for an outgoing offer */
 	struct ast_flags outgoing_call_offer_pref;
+	/*! Codec negotiation prefs for incoming offers */
+	struct ast_stream_codec_negotiation_prefs incoming_offer_codec_prefs;
+	/*! Codec negotiation prefs for outgoing offers */
+	struct ast_stream_codec_negotiation_prefs outgoing_offer_codec_prefs;
+	/*! Codec negotiation prefs for incoming answers */
+	struct ast_stream_codec_negotiation_prefs incoming_answer_codec_prefs;
+	/*! Codec negotiation prefs for outgoing answers */
+	struct ast_stream_codec_negotiation_prefs outgoing_answer_codec_prefs;
 };
 
 /*!
@@ -887,6 +908,8 @@ struct ast_sip_endpoint {
 	unsigned int suppress_q850_reason_headers;
 	/*! Ignore 183 if no SDP is present */
 	unsigned int ignore_183_without_sdp;
+	/*! Enable STIR/SHAKEN support on this endpoint */
+	unsigned int stir_shaken;
 };
 
 /*! URI parameter for symmetric transport */
@@ -2217,6 +2240,19 @@ int ast_sip_create_request_with_auth(const struct ast_sip_auth_vector *auths, pj
  * \retval non-NULL The matching endpoint
  */
 struct ast_sip_endpoint *ast_sip_identify_endpoint(pjsip_rx_data *rdata);
+
+/*!
+ * \brief Get a specific header value from rdata
+ *
+ * \note The returned value does not need to be freed since it's from the rdata pool
+ *
+ * \param rdata The rdata
+ * \param str The header to find
+ *
+ * \retval NULL on failure
+ * \retval The header value on success
+ */
+char *ast_sip_rdata_get_header_value(pjsip_rx_data *rdata, const pj_str_t str);
 
 /*!
  * \brief Set the outbound proxy for an outbound SIP message
