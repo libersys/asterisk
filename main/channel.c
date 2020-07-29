@@ -4044,10 +4044,31 @@ static struct ast_frame *__ast_read(struct ast_channel *chan, int dropaudio, int
 			}
 			break;
 		case AST_FRAME_VOICE:
+
+			struct ast_str *codec_buf = ast_str_alloca(AST_FORMAT_CAP_NAMES_LEN);
 			/* If media was received from a non-default stream don't perform any actions, let it just go through */
 			if (stream != default_stream) {
+				ast_debug(1, "stream != default_stream,  %s\n", ast_format_cap_get_names(ast_stream_get_formats(stream), &codec_buf));
 				break;
+			} else {
+				ast_debug(1, "processing stream %s\n", ast_format_cap_get_names(ast_stream_get_formats(stream), &codec_buf));
 			}
+
+
+		// ast_str_append(&output, 0,
+		// 	"Name: %s\n"
+		// 	"    Type: %s\n"
+		// 	"    State: %s\n"
+		// 	"    Group: %d\n"
+		// 	"    Formats: %s\n"
+		// 	"    Metadata:\n",
+		// 	ast_stream_get_name(stream),
+		// 	ast_codec_media_type2str(ast_stream_get_type(stream)),
+		// 	ast_stream_state2str(ast_stream_get_state(stream)),
+		// 	ast_stream_get_group(stream),
+		// 	ast_format_cap_get_names(ast_stream_get_formats(stream), &codec_buf)
+		// 	);
+
 
 			/* The EMULATE_DTMF flag must be cleared here as opposed to when the duration
 			 * is reached , because we want to make sure we pass at least one
@@ -4136,6 +4157,8 @@ static struct ast_frame *__ast_read(struct ast_channel *chan, int dropaudio, int
 
 				if (ast_set_read_format_path(chan, f->subclass.format, core_format)) {
 					/* Drop frame.  We couldn't make it compatible with the core. */
+					ast_debug(1, "channel '%s' frame dropped. We couldn't make it compatible with the core. dropaudio=%d, dropnondefault=%d\n", ast_channel_name(chan), dropaudio, dropnondefault);
+
 					ast_frfree(f);
 					f = &ast_null_frame;
 					break;
