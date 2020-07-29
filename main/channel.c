@@ -3524,7 +3524,8 @@ static struct ast_frame *__ast_read(struct ast_channel *chan, int dropaudio, int
 	int cause = 0;
 	struct ast_stream *stream = NULL, *default_stream = NULL;
 
-	ast_debug(1, "START __ast_read channel '%s'. dropaudio=%d, dropnondefault=%d\n", ast_channel_name(chan), dropaudio, dropnondefault);
+	ast_debug(1, "START __ast_read channel '%s'. dropaudio=%d, dropnondefault=%d, hooks=%d\n", 
+			ast_channel_name(chan), dropaudio, dropnondefault, chan->framehooks.count);
 
 	/* this function is very long so make sure there is only one return
 	 * point at the end (there are only two exceptions to this).
