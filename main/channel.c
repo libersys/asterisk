@@ -3787,7 +3787,7 @@ static struct ast_frame *__ast_read(struct ast_channel *chan, int dropaudio, int
 
 	if (f) {
 
-		ast_debug(1, "f is known! __ast_read channel '%s'. dropaudio=%d, dropnondefault=%d\n", ast_channel_name(chan), dropaudio, dropnondefault);
+		ast_debug(1, "f is known! __ast_read channel '%s'. frameType=%d, dropaudio=%d, dropnondefault=%d\n", ast_channel_name(chan), dropaudio, dropnondefault);
 
 		// struct ast_str *codec_buf = ast_str_alloca(AST_FORMAT_CAP_NAMES_LEN);
 		// /* If media was received from a non-default stream don't perform any actions, let it just go through */
@@ -3819,6 +3819,8 @@ static struct ast_frame *__ast_read(struct ast_channel *chan, int dropaudio, int
 			ast_frfree(f);
 			f = &ast_null_frame;
 		}
+
+		ast_debug(1, "__ast_read channel '%s', entering swith frameType=%d\n", ast_channel_name(chan), f->frametype);
 
 		switch (f->frametype) {
 		case AST_FRAME_CONTROL:
