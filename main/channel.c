@@ -3777,8 +3777,6 @@ static struct ast_frame *__ast_read(struct ast_channel *chan, int dropaudio, int
 		/* Perform the framehook read event here. After the frame enters the framehook list
 		 * there is no telling what will happen, <insert mad scientist laugh here>!!! */
 		f = ast_framehook_list_read_event(ast_channel_framehooks(chan), f);
-
-		ast_debug(1, "Frame type %d of channel '%s'\n", f->frametype, ast_channel_name(chan));
 	}
 
 	/*
@@ -4008,7 +4006,7 @@ static struct ast_frame *__ast_read(struct ast_channel *chan, int dropaudio, int
 		case AST_FRAME_NULL:
 
 			ast_debug(1, "NULL frame channel %s\n", ast_channel_name(chan));
-			
+
 			// if (ast_test_flag(ast_channel_flags(chan), AST_FLAG_ORIGINATED)) {
 			// 	ast_debug(1, "NULL frame from UnicastRTP channel %s, pass it on!\n", ast_channel_name(chan));
 			// 	/* Just pass it on! */
