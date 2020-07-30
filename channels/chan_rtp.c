@@ -81,6 +81,8 @@ static struct ast_frame  *rtp_read(struct ast_channel *ast)
 	struct ast_rtp_instance *instance = ast_channel_tech_pvt(ast);
 	int fdno = ast_channel_fdno(ast);
 
+	ast_debug(1, "Channel '%s' rtp_read, fdno=%d\n", ast_channel_name(ast), fdno);
+
 	switch (fdno) {
 	case 0:
 		return ast_rtp_instance_read(instance, 0);
