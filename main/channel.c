@@ -4006,7 +4006,15 @@ static struct ast_frame *__ast_read(struct ast_channel *chan, int dropaudio, int
 			}
 			break;
 		case AST_FRAME_NULL:
-			ast_debug(1, "NULL fram type of channel %s\n", ast_channel_name(chan));
+
+			ast_debug(1, "NULL frame channel %s\n", ast_channel_name(chan));
+			
+			// if (ast_test_flag(ast_channel_flags(chan), AST_FLAG_ORIGINATED)) {
+			// 	ast_debug(1, "NULL frame from UnicastRTP channel %s, pass it on!\n", ast_channel_name(chan));
+			// 	/* Just pass it on! */
+			// 	break;
+			// }
+
 			/* The EMULATE_DTMF flag must be cleared here as opposed to when the duration
 			 * is reached , because we want to make sure we pass at least one
 			 * voice frame through before starting the next digit, to ensure a gap

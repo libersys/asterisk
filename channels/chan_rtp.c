@@ -75,20 +75,57 @@ static struct ast_channel_tech unicast_rtp_tech = {
 	.write = rtp_write,
 };
 
+	// /* Perform a sanity check on the engine structure to make sure it has the basics */
+	// if (ast_strlen_zero(engine->name) || !engine->new || !engine->destroy || !engine->write || !engine->read) {
+	// 	ast_log(LOG_WARNING, "RTP Engine '%s' failed sanity check so it was not registered.\n", !ast_strlen_zero(engine->name) ? engine->name : "Unknown");
+	// 	return -1;
+	// }
+
+// /* Unicast RTP Engine Declaration */
+// static struct ast_rtp_engine unicast_rtp_engine = {
+// 	.name = "unicast",
+// 	.new = ast_rtp_new,
+// 	.destroy = ast_rtp_destroy,
+// 	.write = ast_rtp_write,
+// 	.read = ast_rtp_read,
+// 	// .dtmf_begin = ast_rtp_dtmf_begin,
+// 	// .dtmf_end = ast_rtp_dtmf_end,
+// 	// .dtmf_end_with_duration = ast_rtp_dtmf_end_with_duration,
+// 	// .dtmf_mode_set = ast_rtp_dtmf_mode_set,
+// 	// .dtmf_mode_get = ast_rtp_dtmf_mode_get,
+// 	// .update_source = ast_rtp_update_source,
+// 	// .change_source = ast_rtp_change_source,
+// 	// .prop_set = ast_rtp_prop_set,
+// 	// .fd = ast_rtp_fd,
+// 	// .remote_address_set = ast_rtp_remote_address_set,
+// 	// .red_init = rtp_red_init,
+// 	// .red_buffer = rtp_red_buffer,
+// 	// .local_bridge = ast_rtp_local_bridge,
+// 	// .get_stat = ast_rtp_get_stat,
+// 	// .dtmf_compatible = ast_rtp_dtmf_compatible,
+// 	// .stun_request = ast_rtp_stun_request,
+// 	// .stop = ast_rtp_stop,
+// 	// .qos = ast_rtp_qos_set,
+// 	// .sendcng = ast_rtp_sendcng,
+// 	// .ssrc_get = ast_rtp_get_ssrc,
+// 	// .cname_get = ast_rtp_get_cname,
+// 	// .set_remote_ssrc = ast_rtp_set_remote_ssrc,
+// 	// .set_stream_num = ast_rtp_set_stream_num,
+// 	// .extension_enable = ast_rtp_extension_enable,
+// 	// .bundle = ast_rtp_bundle,
+// };
+
 /*! \brief Function called when we should read a frame from the channel */
 static struct ast_frame  *rtp_read(struct ast_channel *ast)
 {
 	struct ast_rtp_instance *instance = ast_channel_tech_pvt(ast);
 	int fdno = ast_channel_fdno(ast);
 
-	ast_debug(1, "Channel '%s' rtp_read, fdno=%d\n", ast_channel_name(ast), fdno);
-
 	switch (fdno) {
 	case 0:
 		return ast_rtp_instance_read(instance, 0);
 	default:
-		return ast_rtp_instance_read(instance, 0);
-		// return &ast_null_frame;
+		return &ast_null_frame;
 	}
 }
 
@@ -441,6 +478,10 @@ static int load_module(void)
 		unload_module();
 		return AST_MODULE_LOAD_DECLINE;
 	}
+
+	// if (ast_rtp_engine_register(&unicast_rtp_engine)) {
+	// 	return AST_MODULE_LOAD_DECLINE;
+	// }
 
 	return AST_MODULE_LOAD_SUCCESS;
 }
