@@ -388,7 +388,7 @@ static struct ast_channel *unicast_rtp_request(const char *type, struct ast_form
 	int payload_type;
 	payload_type = ast_rtp_codecs_payload_code(ast_rtp_instance_get_codecs(instance), 1, fmt, 0);
 	ast_rtp_codecs_payload_set_rx(ast_rtp_instance_get_codecs(instance), payload_type, fmt);
-	ast_debug(1, "UnicastRTP/%s-%p payload type set %d\n", args.destination, instance, rtp_code);
+	ast_debug(1, "UnicastRTP/%s-%p payload type set %d\n", args.destination, instance, payload_type);
 
 	// Step #2 Set framing
 	ast_format_cap_set_framing(caps, 20);
