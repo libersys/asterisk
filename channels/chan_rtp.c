@@ -392,7 +392,7 @@ static struct ast_channel *unicast_rtp_request(const char *type, struct ast_form
 
 	// Step #2 Set framing
 	ast_format_cap_set_framing(caps, 20);
-	ast_debug(1, "UnicastRTP/%s-%p framing set to %d ms\n", args.destination, instance, caps->framing);
+	ast_debug(1, "UnicastRTP/%s-%p framing set to %d ms\n", args.destination, instance, &caps->framing);
 
 	// Step #3 Record tx payload type information that was seen in an m= SDP line.
 	ast_rtp_codecs_payloads_set_m_type(ast_rtp_instance_get_codecs(instance), instance, payload_type);
