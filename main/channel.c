@@ -3778,7 +3778,7 @@ static struct ast_frame *__ast_read(struct ast_channel *chan, int dropaudio, int
 		 * there is no telling what will happen, <insert mad scientist laugh here>!!! */
 		f = ast_framehook_list_read_event(ast_channel_framehooks(chan), f);
 
-		ast_debug(1, "Frame type %d of channel '%p'\n", f->frametype, chan);
+		// ast_debug(1, "Frame type %d of channel '%p'\n", f->frametype, chan);
 	}
 
 	/*

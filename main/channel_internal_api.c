@@ -673,6 +673,7 @@ struct ast_framehook_list *ast_channel_framehooks(const struct ast_channel *chan
 }
 void ast_channel_framehooks_set(struct ast_channel *chan, struct ast_framehook_list *value)
 {
+	ast_debug(1, "Setting framehooks form channel %s \n", ast_channel_name(chan));
 	chan->framehooks = value;
 }
 struct ast_generator *ast_channel_generator(const struct ast_channel *chan)
