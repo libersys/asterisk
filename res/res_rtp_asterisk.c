@@ -7753,19 +7753,19 @@ static struct ast_frame *ast_rtp_read(struct ast_rtp_instance *instance, int rtc
 	rtp->lastrxseqno = seqno;
 
 	if (!rtp->recv_buffer) {
-		ast_debug(1, "RTP from '%s' and no rtp->recv_buffer\n", ast_sockaddr_stringify(&addr));
+		// ast_debug(1, "RTP from '%s' and no rtp->recv_buffer\n", ast_sockaddr_stringify(&addr));
 
 		/* If there is no receive buffer then we can pass back the frame directly */
 		frame = ast_rtp_interpret(instance, srtp, &addr, read_area, res, prev_seqno);
 
-		ast_debug(1, "RTP from '%s' frame type %d\n", ast_sockaddr_stringify(&addr), frame->frametype);
+		// ast_debug(1, "RTP from '%s' frame type %d\n", ast_sockaddr_stringify(&addr), frame->frametype);
 
 		AST_LIST_INSERT_TAIL(&frames, frame, frame_list);
 		return AST_LIST_FIRST(&frames);
 	} else if (rtp->expectedrxseqno == -1 || seqno == rtp->expectedrxseqno) {
 		rtp->expectedrxseqno = seqno + 1;
 
-		ast_debug(1, "RTP from '%s' rtp->expectedrxseqno == -1 || seqno == rtp->expectedrxseqno\n", ast_sockaddr_stringify(&addr));
+		// ast_debug(1, "RTP from '%s' rtp->expectedrxseqno == -1 || seqno == rtp->expectedrxseqno\n", ast_sockaddr_stringify(&addr));
 
 		/* We've cycled over, so go back to 0 */
 		if (rtp->expectedrxseqno == SEQNO_CYCLE_OVER) {
@@ -7777,7 +7777,7 @@ static struct ast_frame *ast_rtp_read(struct ast_rtp_instance *instance, int rtc
 		 */
 		if (!ast_data_buffer_count(rtp->recv_buffer)) {
 			frame = ast_rtp_interpret(instance, srtp, &addr, read_area, res, prev_seqno);
-			ast_debug(1, "RTP from '%s' !ast_data_buffer_count(rtp->recv_buffer) frametype=%d\n", ast_sockaddr_stringify(&addr), frame->frametype);
+			// ast_debug(1, "RTP from '%s' !ast_data_buffer_count(rtp->recv_buffer) frametype=%d\n", ast_sockaddr_stringify(&addr), frame->frametype);
 
 			AST_LIST_INSERT_TAIL(&frames, frame, frame_list);
 			return AST_LIST_FIRST(&frames);
@@ -7795,7 +7795,7 @@ static struct ast_frame *ast_rtp_read(struct ast_rtp_instance *instance, int rtc
 		if (!ast_data_buffer_get(rtp->recv_buffer, rtp->expectedrxseqno)) {
 			frame = ast_rtp_interpret(instance, srtp, &addr, read_area, res, prev_seqno);
 
-			ast_debug(1, "RTP from '%s' !ast_data_buffer_get(rtp->recv_buffer, rtp->expectedrxseqno) frametype=%d\n", ast_sockaddr_stringify(&addr), frame->frametype);
+			// ast_debug(1, "RTP from '%s' !ast_data_buffer_get(rtp->recv_buffer, rtp->expectedrxseqno) frametype=%d\n", ast_sockaddr_stringify(&addr), frame->frametype);
 
 			AST_LIST_INSERT_TAIL(&frames, frame, frame_list);
 			return AST_LIST_FIRST(&frames);
@@ -7807,7 +7807,7 @@ static struct ast_frame *ast_rtp_read(struct ast_rtp_instance *instance, int rtc
 		 * of order packet processing by libsrtp which we are trying to avoid.
 		 */
 		frame = ast_frdup(ast_rtp_interpret(instance, srtp, &addr, read_area, res, prev_seqno));
-		ast_debug(1, "RTP from '%s' Otherwise we need to dupe the frame frametype=%d\n", ast_sockaddr_stringify(&addr), frame->frametype);
+		// ast_debug(1, "RTP from '%s' Otherwise we need to dupe the frame frametype=%d\n", ast_sockaddr_stringify(&addr), frame->frametype);
 		if (frame) {
 			AST_LIST_INSERT_TAIL(&frames, frame, frame_list);
 			prev_seqno = seqno;
