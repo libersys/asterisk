@@ -7107,6 +7107,8 @@ static struct ast_frame *ast_rtp_interpret(struct ast_rtp_instance *instance, st
 	RAII_VAR(struct ast_rtp_payload_type *, payload, NULL, ao2_cleanup);
 	struct frame_list frames;
 
+	ast_debug(1, "interpreting RTP from '%s'\n", ast_sockaddr_stringify(remote_address));
+
 	/* If this payload is encrypted then decrypt it using the given SRTP instance */
 	if ((*read_area & 0xC0) && res_srtp && srtp && res_srtp->unprotect(
 		    srtp, read_area, &res, 0) < 0) {
@@ -7128,16 +7130,20 @@ static struct ast_frame *ast_rtp_interpret(struct ast_rtp_instance *instance, st
 	seqno &= 0xffff;
 	timestamp = ntohl(rtpheader[1]);
 
+	ast_debug(1, "interpreting RTP from '%s', fields pulled out seqno=%d\n", ast_sockaddr_stringify(remote_address), seqno);
+
 	AST_LIST_HEAD_INIT_NOLOCK(&frames);
 
 	/* Remove any padding bytes that may be present */
 	if (padding) {
 		res -= read_area[res - 1];
+		ast_debug(1, "interpreting RTP from '%s', padding removed\n", ast_sockaddr_stringify(remote_address));
 	}
 
 	/* Skip over any CSRC fields */
 	if (cc) {
 		hdrlen += cc * 4;
+		ast_debug(1, "interpreting RTP from '%s', CSRC skipped\n", ast_sockaddr_stringify(remote_address));
 	}
 
 	/* Look for any RTP extensions, currently we do not support any */
@@ -7174,6 +7180,8 @@ static struct ast_frame *ast_rtp_interpret(struct ast_rtp_instance *instance, st
 		rtp->seedrxseqno = seqno;
 	}
 
+	ast_debug(1, "interpreting RTP from '%s', rtp->rxcount++ passed\n", ast_sockaddr_stringify(remote_address));
+
 	/* Do not schedule RR if RTCP isn't run */
 	if (rtp->rtcp && !ast_sockaddr_isnull(&rtp->rtcp->them) && rtp->rtcp->schedid < 0) {
 		/* Schedule transmission of Receiver Report */
@@ -7197,6 +7205,8 @@ static struct ast_frame *ast_rtp_interpret(struct ast_rtp_instance *instance, st
 		struct timeval rxtime;
 		struct ast_frame *f;
 
+		ast_debug(1, "interpreting RTP from '%s', directly bridged to another instance\n", ast_sockaddr_stringify(remote_address));
+
 		/* Update statistics for jitter so they are correct in RTCP */
 		calc_rxstamp(&rxtime, rtp, timestamp, mark);
 
@@ -7211,12 +7221,17 @@ static struct ast_frame *ast_rtp_interpret(struct ast_rtp_instance *instance, st
 	payload = ast_rtp_codecs_get_payload(ast_rtp_instance_get_codecs(instance), payloadtype);
 	if (!payload) {
 		/* Unknown payload type. */
+		ast_debug(1, "interpreting RTP from '%s', Unknown payload type.\n", ast_sockaddr_stringify(remote_address));
+
 		return AST_LIST_FIRST(&frames) ? AST_LIST_FIRST(&frames) : &ast_null_frame;
 	}
 
 	/* If the payload is not actually an Asterisk one but a special one pass it off to the respective handler */
 	if (!payload->asterisk_format) {
 		struct ast_frame *f = NULL;
+
+		ast_debug(1, "interpreting RTP from '%s', !payload->asterisk_format\n", ast_sockaddr_stringify(remote_address));
+
 		if (payload->rtp_code == AST_RTP_DTMF) {
 			/* process_dtmf_rfc2833 may need to return multiple frames. We do this
 			 * by passing the pointer to the frame list to it so that the method
