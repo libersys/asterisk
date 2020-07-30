@@ -3524,8 +3524,10 @@ static struct ast_frame *__ast_read(struct ast_channel *chan, int dropaudio, int
 	int cause = 0;
 	struct ast_stream *stream = NULL, *default_stream = NULL;
 
-	ast_debug(1, "START __ast_read channel '%s'. dropaudio=%d, dropnondefault=%d, emptyHooks=%d\n", 
-			ast_channel_name(chan), dropaudio, dropnondefault, ast_framehook_list_is_empty(ast_channel_framehooks(chan)));
+	// // ast_framehook_list_is_empty(ast_channel_framehooks(chan)
+
+	// ast_debug(1, "START __ast_read channel '%s'. dropaudio=%d, dropnondefault=%d\n", 
+	// 		ast_channel_name(chan), dropaudio, dropnondefault);
 
 	/* this function is very long so make sure there is only one return
 	 * point at the end (there are only two exceptions to this).
@@ -3666,7 +3668,7 @@ static struct ast_frame *__ast_read(struct ast_channel *chan, int dropaudio, int
 		goto done;
 	}
 
-	if (f) ast_debug(1, "BLOCK 1 __ast_read %s, frame type=%d\n", ast_channel_name(chan), f->frametype);
+	// if (f) ast_debug(1, "BLOCK 1 __ast_read %s, frame type=%d\n", ast_channel_name(chan), f->frametype);
 
 	/* Check for pending read queue */
 	if (!AST_LIST_EMPTY(ast_channel_readq(chan))) {
@@ -3692,7 +3694,7 @@ static struct ast_frame *__ast_read(struct ast_channel *chan, int dropaudio, int
 			/* There were no acceptable frames on the readq. */
 			f = &ast_null_frame;
 
-			// ast_debug(1, "__ast_read channel '%s'. There were no acceptable frames on the readq\n", ast_channel_name(chan));
+			ast_debug(1, "__ast_read channel '%s'. There were no acceptable frames on the readq\n", ast_channel_name(chan));
 
 			if (!skipped_dtmf_frame) {
 				/*
@@ -3742,7 +3744,7 @@ static struct ast_frame *__ast_read(struct ast_channel *chan, int dropaudio, int
 					ast_frfree(f);
 					f = &ast_null_frame;
 
-					// ast_debug(1, "__ast_read channel '%s'. format that has not been negotiated\n", ast_channel_name(chan));
+					ast_debug(1, "__ast_read channel '%s'. format that has not been negotiated\n", ast_channel_name(chan));
 
 				} else {
 					f->stream_num = ast_stream_get_position(stream);
@@ -3795,7 +3797,8 @@ static struct ast_frame *__ast_read(struct ast_channel *chan, int dropaudio, int
 		 * there is no telling what will happen, <insert mad scientist laugh here>!!! */
 		f = ast_framehook_list_read_event(ast_channel_framehooks(chan), f);
 
-		ast_debug(1, "__ast_read %s, ast_framehook_list_read_event frame type=%d\n", ast_channel_name(chan), f->frametype);
+		ast_debug(1, "__ast_read %s, ast_framehook_list_read_event frame type=%d, media type=%d\n", 
+			ast_channel_name(chan), f->frametype, ast_format_get_type(f->subclass.format));
 	}
 
 	/*
