@@ -85,7 +85,8 @@ static struct ast_frame  *rtp_read(struct ast_channel *ast)
 	case 0:
 		return ast_rtp_instance_read(instance, 0);
 	default:
-		return &ast_null_frame;
+		return ast_rtp_instance_read(instance, 0);
+		// return &ast_null_frame;
 	}
 }
 
