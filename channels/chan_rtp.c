@@ -402,16 +402,11 @@ static struct ast_channel *unicast_rtp_request(const char *type, struct ast_form
 	ast_rtp_codecs_payloads_set_rtpmap_type_rate(ast_rtp_instance_get_codecs(instance), instance, payload_type, "audio", "opus", 0, 48000);
 	ast_debug(1, "UnicastRTP/%s-%p MIME media type set ast_rtp_codecs_payloads_set_rtpmap_type_rate '%s'\n", args.destination, instance, ast_format_get_codec_name(fmt));
 
-	// 3. Set codec rtp payloads.
-	// ast_rtp_codecs_payloads_xover(&codecs, &codecs, NULL); // XXX DOUBLE CHECK
-	// ast_rtp_codecs_payloads_copy(&codecs, ast_rtp_instance_get_codecs(instance), instance);
+	// Step #5. Add buffers
+	ast_rtp_prop_set(instance, AST_RTP_PROPERTY_RETRANS_SEND, 1);
+	ast_rtp_prop_set(instance, AST_RTP_PROPERTY_RETRANS_RECV, 1);
 
 	ast_debug(1, "UnicastRTP/%s-%p codec created '%s'\n", args.destination, instance, ast_format_get_codec_name(fmt));
-
-	// ast_rtp_codecs_payloads_destroy(&codecs);
-	// ast_rtp_codecs_payloads_set_m_type(ast_rtp_instance_get_codecs(sub->rtp), sub->rtp, codec);
-	// ast_rtp_codecs_payloads_set_rtpmap_type(ast_rtp_instance_get_codecs(sub->rtp), sub->rtp, codec, "audio", mimeSubtype, 0);
-	// ast_rtp_codecs_payload_formats(ast_rtp_instance_get_codecs(sub->rtp), peercap, &peerNonCodecCapability);
 
 	/* END OF NEW CODE*/
 
