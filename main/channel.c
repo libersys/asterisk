@@ -4006,6 +4006,7 @@ static struct ast_frame *__ast_read(struct ast_channel *chan, int dropaudio, int
 			}
 			break;
 		case AST_FRAME_NULL:
+			ast_debug(1, "NULL fram type of channel %s\n", ast_channel_name(chan));
 			/* The EMULATE_DTMF flag must be cleared here as opposed to when the duration
 			 * is reached , because we want to make sure we pass at least one
 			 * voice frame through before starting the next digit, to ensure a gap
