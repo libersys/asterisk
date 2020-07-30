@@ -361,9 +361,12 @@ static struct ast_channel *unicast_rtp_request(const char *type, struct ast_form
 		goto failure;
 	}
 
+	ast_debug(1, "'UnicastRTP' channel options '%s' parsed\n", args.options);
+
 	if (ast_test_flag(&opts, OPT_RTP_CODEC)
 		&& !ast_strlen_zero(opt_args[OPT_ARG_RTP_CODEC])) {
 		fmt = ast_format_cache_get(opt_args[OPT_ARG_RTP_CODEC]);
+		ast_debug(1, "Codec '%s' found for sending RTP to '%s'\n", opt_args[OPT_ARG_RTP_CODEC], args.destination);
 		if (!fmt) {
 			ast_log(LOG_ERROR, "Codec '%s' not found for sending RTP to '%s'\n",
 				opt_args[OPT_ARG_RTP_CODEC], args.destination);
@@ -371,6 +374,7 @@ static struct ast_channel *unicast_rtp_request(const char *type, struct ast_form
 		}
 	} else {
 		fmt = derive_format_from_cap(cap);
+		ast_debug(1, "No codec option for sending RTP to '%s', using derive_format_from_cap(cap)\n", args.destination);
 		if (!fmt) {
 			ast_log(LOG_ERROR, "No codec available for sending RTP to '%s'\n",
 				args.destination);
