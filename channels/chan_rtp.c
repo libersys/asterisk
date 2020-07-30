@@ -276,8 +276,7 @@ static struct ast_channel *unicast_rtp_request(const char *type, struct ast_form
 	struct ast_channel *chan;
 	struct ast_format_cap *caps = NULL;
 	struct ast_format *fmt = NULL;
-
-	struct ast_rtp_codecs codec = AST_RTP_CODECS_NULL_INIT;
+	struct ast_rtp_codecs codecs = AST_RTP_CODECS_NULL_INIT;
 
 	const char *engine_name;
 	AST_DECLARE_APP_ARGS(args,
@@ -384,15 +383,30 @@ static struct ast_channel *unicast_rtp_request(const char *type, struct ast_form
 
 	/* ADD YOUR CODE HERE */
 
-	// 1. Get codec
-	codec = ast_format_get_codec(fmt);
+	/* CREATE CODECS */
+	// Step #1 Get the Asterisk payload type
+	int payload_type;
+	payload_type = ast_rtp_codecs_payload_code(ast_rtp_instance_get_codecs(instance), 1, fmt, 0);
+	ast_rtp_codecs_payload_set_rx(ast_rtp_instance_get_codecs(instance), payload_type, fmt);
+	ast_debug(1, "UnicastRTP/%s-%p payload type set %d\n", args.destination, instance, rtp_code);
+	// Step #2. Record tx payload type information that was seen in an m= SDP line.
+	ast_rtp_codecs_payloads_set_m_type(codecs, instance, payload_type);
+	// Step #3. Set tx payload type to a known MIME media type for a codec with a specific sample rate.
+	ast_rtp_codecs_payloads_set_rtpmap_type_rate(codecs, instance, payload_type, "audio", "opus", 0, 48000)
+
 	// 2. Set framing
-	ast_format_cap_set_framing(caps, codec);
+	ast_format_cap_set_framing(caps, codecs);
 	// 3. Set codec rtp payloads.
-	ast_rtp_codecs_payloads_copy(&codec, ast_rtp_instance_get_codecs(instance), instance);
+	ast_rtp_codecs_payloads_xover(&codecs, &codecs, NULL); // XXX DOUBLE CHECK
+	ast_rtp_codecs_payloads_copy(&codecs, ast_rtp_instance_get_codecs(instance), instance);
 
 	ast_debug(1, "UnicastRTP/%s-%p codec created '%s'\n", 
 		args.destination, instance, ast_format_get_codec_name(fmt));
+
+	ast_rtp_codecs_payloads_destroy(&codecs);
+	// ast_rtp_codecs_payloads_set_m_type(ast_rtp_instance_get_codecs(sub->rtp), sub->rtp, codec);
+	// ast_rtp_codecs_payloads_set_rtpmap_type(ast_rtp_instance_get_codecs(sub->rtp), sub->rtp, codec, "audio", mimeSubtype, 0);
+	// ast_rtp_codecs_payload_formats(ast_rtp_instance_get_codecs(sub->rtp), peercap, &peerNonCodecCapability);
 
 	/* END OF NEW CODE*/
 
@@ -423,6 +437,94 @@ failure:
 	*cause = AST_CAUSE_FAILURE;
 	return NULL;
 }
+
+
+// static void get_codecs(struct ast_sip_session *session, const struct pjmedia_sdp_media *stream, struct ast_rtp_codecs *codecs,
+// 	struct ast_sip_session_media *session_media)
+// {
+// 	pjmedia_sdp_attr *attr;
+// 	pjmedia_sdp_rtpmap *rtpmap;
+// 	pjmedia_sdp_fmtp fmtp;
+// 	struct ast_format *format;
+// 	int i, num = 0, tel_event = 0;
+// 	char name[256];
+// 	char media[20];
+// 	char fmt_param[256];
+// 	enum ast_rtp_options options = session->endpoint->media.g726_non_standard ?
+// 		AST_RTP_OPT_G726_NONSTANDARD : 0;
+
+// 	ast_rtp_codecs_payloads_initialize(codecs);
+
+// 	/* Iterate through provided formats */
+// 	for (i = 0; i < stream->desc.fmt_count; ++i) {
+// 		/* The payload is kept as a string for things like t38 but for video it is always numerical */
+// 		ast_rtp_codecs_payloads_set_m_type(codecs, NULL, pj_strtoul(&stream->desc.fmt[i]));
+// 		/* Look for the optional rtpmap attribute */
+// 		if (!(attr = pjmedia_sdp_media_find_attr2(stream, "rtpmap", &stream->desc.fmt[i]))) {
+// 			continue;
+// 		}
+
+// 		/* Interpret the attribute as an rtpmap */
+// 		if ((pjmedia_sdp_attr_to_rtpmap(session->inv_session->pool_prov, attr, &rtpmap)) != PJ_SUCCESS) {
+// 			continue;
+// 		}
+
+// 		ast_copy_pj_str(name, &rtpmap->enc_name, sizeof(name));
+// 		if (strcmp(name, "telephone-event") == 0) {
+// 			tel_event++;
+// 		}
+
+// 		ast_copy_pj_str(media, (pj_str_t*)&stream->desc.media, sizeof(media));
+// 		ast_rtp_codecs_payloads_set_rtpmap_type_rate(codecs, NULL,
+// 			pj_strtoul(&stream->desc.fmt[i]), media, name, options, rtpmap->clock_rate);
+// 		/* Look for an optional associated fmtp attribute */
+// 		if (!(attr = pjmedia_sdp_media_find_attr2(stream, "fmtp", &rtpmap->pt))) {
+// 			continue;
+// 		}
+
+// 		if ((pjmedia_sdp_attr_get_fmtp(attr, &fmtp)) == PJ_SUCCESS) {
+// 			ast_copy_pj_str(fmt_param, &fmtp.fmt, sizeof(fmt_param));
+// 			if (sscanf(fmt_param, "%30d", &num) != 1) {
+// 				continue;
+// 			}
+
+// 			if ((format = ast_rtp_codecs_get_payload_format(codecs, num))) {
+// 				struct ast_format *format_parsed;
+
+// 				ast_copy_pj_str(fmt_param, &fmtp.fmt_param, sizeof(fmt_param));
+
+// 				format_parsed = ast_format_parse_sdp_fmtp(format, fmt_param);
+// 				if (format_parsed) {
+// 					ast_rtp_codecs_payload_replace_format(codecs, num, format_parsed);
+// 					ao2_ref(format_parsed, -1);
+// 				}
+
+// 				ao2_ref(format, -1);
+// 			}
+// 		}
+// 	}
+// 	if (!tel_event && (session->dtmf == AST_SIP_DTMF_AUTO)) {
+// 		ast_rtp_instance_dtmf_mode_set(session_media->rtp, AST_RTP_DTMF_MODE_INBAND);
+// 	}
+
+// 	if (session->dtmf == AST_SIP_DTMF_AUTO_INFO) {
+// 		if  (tel_event) {
+// 			ast_rtp_instance_dtmf_mode_set(session_media->rtp, AST_RTP_DTMF_MODE_RFC2833);
+// 		} else {
+// 			ast_rtp_instance_dtmf_mode_set(session_media->rtp, AST_RTP_DTMF_MODE_NONE);
+// 		}
+// 	}
+
+
+// 	/* Get the packetization, if it exists */
+// 	if ((attr = pjmedia_sdp_media_find_attr2(stream, "ptime", NULL))) {
+// 		unsigned long framing = pj_strtoul(pj_strltrim(&attr->value));
+// 		if (framing && session->endpoint->media.rtp.use_ptime) {
+// 			ast_rtp_codecs_set_framing(codecs, framing);
+// 		}
+// 	}
+// }
+
 
 // /* channel is already locked */
 // static int set_caps(struct ast_channel *chan, struct ast_format *preferred_fmt, 
