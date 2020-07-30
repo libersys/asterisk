@@ -42,6 +42,7 @@
 #include "asterisk/rtp_engine.h"
 #include "asterisk/causes.h"
 #include "asterisk/format_cache.h"
+#include "asterisk/format_cap.h"
 #include "asterisk/multicast_rtp.h"
 #include "asterisk/dns_core.h"
 
@@ -74,46 +75,6 @@ static struct ast_channel_tech unicast_rtp_tech = {
 	.read = rtp_read,
 	.write = rtp_write,
 };
-
-	// /* Perform a sanity check on the engine structure to make sure it has the basics */
-	// if (ast_strlen_zero(engine->name) || !engine->new || !engine->destroy || !engine->write || !engine->read) {
-	// 	ast_log(LOG_WARNING, "RTP Engine '%s' failed sanity check so it was not registered.\n", !ast_strlen_zero(engine->name) ? engine->name : "Unknown");
-	// 	return -1;
-	// }
-
-// /* Unicast RTP Engine Declaration */
-// static struct ast_rtp_engine unicast_rtp_engine = {
-// 	.name = "unicast",
-// 	.new = ast_rtp_new,
-// 	.destroy = ast_rtp_destroy,
-// 	.write = ast_rtp_write,
-// 	.read = ast_rtp_read,
-// 	// .dtmf_begin = ast_rtp_dtmf_begin,
-// 	// .dtmf_end = ast_rtp_dtmf_end,
-// 	// .dtmf_end_with_duration = ast_rtp_dtmf_end_with_duration,
-// 	// .dtmf_mode_set = ast_rtp_dtmf_mode_set,
-// 	// .dtmf_mode_get = ast_rtp_dtmf_mode_get,
-// 	// .update_source = ast_rtp_update_source,
-// 	// .change_source = ast_rtp_change_source,
-// 	// .prop_set = ast_rtp_prop_set,
-// 	// .fd = ast_rtp_fd,
-// 	// .remote_address_set = ast_rtp_remote_address_set,
-// 	// .red_init = rtp_red_init,
-// 	// .red_buffer = rtp_red_buffer,
-// 	// .local_bridge = ast_rtp_local_bridge,
-// 	// .get_stat = ast_rtp_get_stat,
-// 	// .dtmf_compatible = ast_rtp_dtmf_compatible,
-// 	// .stun_request = ast_rtp_stun_request,
-// 	// .stop = ast_rtp_stop,
-// 	// .qos = ast_rtp_qos_set,
-// 	// .sendcng = ast_rtp_sendcng,
-// 	// .ssrc_get = ast_rtp_get_ssrc,
-// 	// .cname_get = ast_rtp_get_cname,
-// 	// .set_remote_ssrc = ast_rtp_set_remote_ssrc,
-// 	// .set_stream_num = ast_rtp_set_stream_num,
-// 	// .extension_enable = ast_rtp_extension_enable,
-// 	// .bundle = ast_rtp_bundle,
-// };
 
 /*! \brief Function called when we should read a frame from the channel */
 static struct ast_frame  *rtp_read(struct ast_channel *ast)
@@ -315,6 +276,9 @@ static struct ast_channel *unicast_rtp_request(const char *type, struct ast_form
 	struct ast_channel *chan;
 	struct ast_format_cap *caps = NULL;
 	struct ast_format *fmt = NULL;
+
+	struct ast_rtp_codecs codec = AST_RTP_CODECS_NULL_INIT;
+
 	const char *engine_name;
 	AST_DECLARE_APP_ARGS(args,
 		AST_APP_ARG(destination);
@@ -417,6 +381,21 @@ static struct ast_channel *unicast_rtp_request(const char *type, struct ast_form
 	ast_channel_tech_set(chan, &unicast_rtp_tech);
 
 	ast_format_cap_append(caps, fmt, 0);
+
+	/* ADD YOUR CODE HERE */
+
+	// 1. Get codec
+	codec = ast_format_get_codec(fmt);
+	// 2. Set framing
+	ast_format_cap_set_framing(caps, codec);
+	// 3. Set codec rtp payloads.
+	ast_rtp_codecs_payloads_copy(&codec, ast_rtp_instance_get_codecs(instance), instance);
+
+	ast_debug(1, "UnicastRTP/%s-%p codec created '%s'\n", 
+		args.destination, instance, ast_format_get_codec_name(fmt));
+
+	/* END OF NEW CODE*/
+
 	ast_channel_nativeformats_set(chan, caps);
 	ast_channel_set_writeformat(chan, fmt);
 	ast_channel_set_rawwriteformat(chan, fmt);
@@ -444,6 +423,30 @@ failure:
 	*cause = AST_CAUSE_FAILURE;
 	return NULL;
 }
+
+// /* channel is already locked */
+// static int set_caps(struct ast_channel *chan, struct ast_format *preferred_fmt, 
+// 					struct ast_format_cap *caps, struct ast_rtp_codecs *codecs, struct ast_rtp_instance *rtp)
+// {
+
+// 	enum ast_media_type media_type = session_media->type;
+// 	int fmts = 0;
+
+// 	/* SET FRAMING */
+// 	ast_format_cap_set_framing(caps, codecs);
+
+// 	// /* Set frame packetization */
+// 	// ast_rtp_codecs_set_framing(ast_rtp_instance_get_codecs(sub->rtp),
+// 	// 	ast_format_cap_get_framing(l->cap));
+
+// 	// We use always the same offer.
+// 	ast_rtp_codecs_payloads_xover(&codecs, &codecs, NULL);
+
+// 	ast_rtp_codecs_payloads_copy(&codecs, ast_rtp_instance_get_codecs(rtp), rtp);
+
+// 	ast_rtp_codecs_payloads_destroy(&codecs);
+// 	return 0;
+// }
 
 /*! \brief Function called when our module is unloaded */
 static int unload_module(void)
@@ -483,10 +486,6 @@ static int load_module(void)
 		return AST_MODULE_LOAD_DECLINE;
 	}
 
-	// if (ast_rtp_engine_register(&unicast_rtp_engine)) {
-	// 	return AST_MODULE_LOAD_DECLINE;
-	// }
-
 	return AST_MODULE_LOAD_SUCCESS;
 }
 
@@ -497,3 +496,166 @@ AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_LOAD_ORDER, "RTP Media Channel",
 	.load_pri = AST_MODPRI_CHANNEL_DRIVER,
 	.requires = "res_rtp_multicast",
 );
+
+
+
+// /* channel is already locked */
+// static int set_caps(struct ast_channel *chan, struct ast_format *preferred_fmt,
+// 	const struct pjmedia_sdp_media *stream,
+// 	struct ast_stream *asterisk_stream)
+// {
+// 	RAII_VAR(struct ast_format_cap *, caps, NULL, ao2_cleanup);
+// 	// RAII_VAR(struct ast_format_cap *, peer, NULL, ao2_cleanup);
+// 	// RAII_VAR(struct ast_format_cap *, joint, NULL, ao2_cleanup);
+// 	enum ast_media_type media_type = session_media->type;
+// 	struct ast_rtp_codecs codecs = AST_RTP_CODECS_NULL_INIT;
+// 	int fmts = 0;
+// 	// int direct_media_enabled = !ast_sockaddr_isnull(&session_media->direct_media_addr) &&
+// 	// 	ast_format_cap_count(session->direct_media_cap);
+// 	// int dsp_features = 0;
+
+// 	// if (!(caps = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT)) ||
+// 	//     !(peer = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT)) ||
+// 	//     !(joint = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT))) {
+// 	// 	ast_log(LOG_ERROR, "Failed to allocate %s capabilities\n",
+// 	// 		ast_codec_media_type2str(session_media->type));
+// 	// 	return -1;
+// 	// }
+// channel
+// 	/* get the endpoint capabilities */
+// 	/* Direct media is not allowed in UnicastRTP */
+// 	ast_format_cap_append_from_cap(caps, session->endpoint->media.codecs, media_type);
+
+// 	// /* get the capabilities on the peer */
+// 	// get_codecs(session, stream, &codecs,  session_media);
+// 	// ast_rtp_codecs_payload_formats(&codecs, peer, &fmts);
+
+// 	// /* get the joint capabilities between peer and endpoint */
+// 	// ast_format_cap_get_compatible(caps, peer, joint);
+// 	// if (!ast_format_cap_count(joint)) {
+// 	// 	struct ast_str *usbuf = ast_str_alloca(AST_FORMAT_CAP_NAMES_LEN);
+// 	// 	struct ast_str *thembuf = ast_str_alloca(AST_FORMAT_CAP_NAMES_LEN);
+
+// 	// 	ast_rtp_codecs_payloads_destroy(&codecs);
+// 	// 	ast_log(LOG_NOTICE, "No joint capabilities for '%s' media stream between our configuration(%s) and incoming SDP(%s)\n",
+// 	// 		ast_codec_media_type2str(session_media->type),
+// 	// 		ast_format_cap_get_names(caps, &usbuf),
+// 	// 		ast_format_cap_get_names(peer, &thembuf));
+// 	// 	return -1;
+// 	// }
+
+// 	// We use always the same offer.
+// 	// if (is_offer) {
+// 		/*
+// 		 * Setup rx payload type mapping to prefer the mapping
+// 		 * from the peer that the RFC says we SHOULD use.
+// 		 */
+// 		ast_rtp_codecs_payloads_xover(&codecs, &codecs, NULL);
+// 	// }
+// 	ast_rtp_codecs_payloads_copy(&codecs, ast_rtp_instance_get_codecs(session_media->rtp),
+// 		session_media->rtp);
+
+// 	ast_stream_set_formats(asterisk_stream, joint);
+
+// 	// /* If this is a bundled stream then apply the payloads to RTP instance acting as transport to prevent conflicts */
+// 	// if (session_media_transport != session_media && session_media->bundled) {
+// 	// 	int index;
+
+// 	// 	for (index = 0; index < ast_format_cap_count(joint); ++index) {
+// 	// 		struct ast_format *format = ast_format_cap_get_format(joint, index);
+// 	// 		int rtp_code;
+
+// 	// 		/* Ensure this payload is in the bundle group transport codecs, this purposely doesn't check the return value for
+// 	// 		 * things as the format is guaranteed to have a payload already.
+// 	// 		 */
+// 	// 		rtp_code = ast_rtp_codecs_payload_code(ast_rtp_instance_get_codecs(session_media->rtp), 1, format, 0);
+// 	// 		ast_rtp_codecs_payload_set_rx(ast_rtp_instance_get_codecs(session_media_transport->rtp), rtp_code, format);
+
+// 	// 		ao2_ref(format, -1);
+// 	// 	}
+// 	// }
+
+
+// 	// channel is already locked
+// 	// ast_channel_lock(chan);
+// 	ast_format_cap_remove_by_type(caps, AST_MEDIA_TYPE_UNKNOWN);
+// 	ast_format_cap_append_from_cap(caps, ast_channel_nativeformats(chan),
+// 		AST_MEDIA_TYPE_UNKNOWN);
+// 	ast_format_cap_remove_by_type(caps, media_type);
+
+// 	/* USE preferred_codec_only CODE */
+// 	// struct ast_format *preferred_fmt = ast_format_cap_get_format(joint, 0);
+// 	ast_format_cap_append(caps, preferred_fmt, 0);
+// 	// ao2_ref(preferred_fmt, -1);
+
+// 	// if (chan && ast_sip_session_is_pending_stream_default(session, asterisk_stream)) {
+// 	// 	ast_channel_lock(chan);
+// 	// 	ast_format_cap_remove_by_type(caps, AST_MEDIA_TYPE_UNKNOWN);
+// 	// 	ast_format_cap_append_from_cap(caps, ast_channel_nativeformats(chan),
+// 	// 		AST_MEDIA_TYPE_UNKNOWN);
+// 	// 	ast_format_cap_remove_by_type(caps, media_type);
+
+// 	// 	/* USE preferred_codec_only CODE */
+// 	// 	struct ast_format *preferred_fmt = ast_format_cap_get_format(joint, 0);
+// 	// 	ast_format_cap_append(caps, preferred_fmt, 0);
+// 	// 	ao2_ref(preferred_fmt, -1);
+
+// 	// 	// if (session->endpoint->preferred_codec_only){
+// 	// 	// 	struct ast_format *preferred_fmt = ast_format_cap_get_format(joint, 0);
+// 	// 	// 	ast_format_cap_append(caps, preferred_fmt, 0);
+// 	// 	// 	ao2_ref(preferred_fmt, -1);
+// 	// 	// } else if (!session->endpoint->asymmetric_rtp_codec) {
+// 	// 	// 	struct ast_format *best;
+// 	// 	// 	/*
+// 	// 	// 	 * If we don't allow the sending codec to be changed on our side
+// 	// 	// 	 * then get the best codec from the joint capabilities of the media
+// 	// 	// 	 * type and use only that. This ensures the core won't start sending
+// 	// 	// 	 * out a format that we aren't currently sending.
+// 	// 	// 	 */
+
+// 	// 	// 	best = ast_format_cap_get_best_by_type(joint, media_type);
+// 	// 	// 	if (best) {
+// 	// 	// 		ast_format_cap_append(caps, best, ast_format_cap_get_framing(joint));
+// 	// 	// 		ao2_ref(best, -1);
+// 	// 	// 	}
+// 	// 	// } else {
+// 	// 	// 	ast_format_cap_append_from_cap(caps, joint, media_type);
+// 	// 	// }
+
+// 	// 	/* THIS WAS ALREADY DONE WHEN CREATING THE RTP INSTANCE */
+// 	// 	// /*
+// 	// 	//  * Apply the new formats to the channel, potentially changing
+// 	// 	//  * raw read/write formats and translation path while doing so.
+// 	// 	//  */
+// 	// 	// ast_channel_nativeformats_set(chan, caps);
+// 	// 	// if (media_type == AST_MEDIA_TYPE_AUDIO) {
+// 	// 	// 	ast_set_read_format(chan, ast_channel_readformat(chan));
+// 	// 	// 	ast_set_write_format(chan, ast_channel_writeformat(chan));
+// 	// 	// }
+
+// 	// 	/* DTMF IS NOT SUPPORTED IN UNICAST RTP */
+// 	// 	// if ( ((session->dtmf == AST_SIP_DTMF_AUTO) || (session->dtmf == AST_SIP_DTMF_AUTO_INFO) )
+// 	// 	//     && (ast_rtp_instance_dtmf_mode_get(session_media->rtp) == AST_RTP_DTMF_MODE_RFC2833)
+// 	// 	//     && (session->dsp)) {
+// 	// 	// 	dsp_features = ast_dsp_get_features(session->dsp);
+// 	// 	// 	dsp_features &= ~DSP_FEATURE_DIGIT_DETECT;
+// 	// 	// 	if (dsp_features) {
+// 	// 	// 		ast_dsp_set_features(session->dsp, dsp_features);
+// 	// 	// 	} else {
+// 	// 	// 		ast_dsp_free(session->dsp);
+// 	// 	// 		session->dsp = NULL;
+// 	// 	// 	}
+// 	// 	// }
+
+// 	// 	/* CHECK BRIDGE AND CHANNEL LOCKS */
+
+// 	// 	if (ast_channel_is_bridged(chan)) {
+// 	// 		ast_channel_set_unbridged_nolock(chan, 1);
+// 	// 	}
+
+// 	// 	ast_channel_unlock(chan);
+// 	// }
+
+// 	ast_rtp_codecs_payloads_destroy(&codecs);
+// 	return 0;
+// }
