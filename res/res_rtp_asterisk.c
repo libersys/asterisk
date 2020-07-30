@@ -7260,7 +7260,7 @@ static struct ast_frame *ast_rtp_interpret(struct ast_rtp_instance *instance, st
 	ao2_replace(rtp->lastrxformat, payload->format);
 	ao2_replace(rtp->f.subclass.format, payload->format);
 
-	ast_debug(1, "RTP received from '%s', format type=%d\n", ast_sockaddr_stringify(remote_address), ast_format_get_type(rtp->f.subclass.format));
+	// ast_debug(1, "RTP received from '%s', format type=%d\n", ast_sockaddr_stringify(remote_address), ast_format_get_type(rtp->f.subclass.format));
 
 	switch (ast_format_get_type(rtp->f.subclass.format)) {
 	case AST_MEDIA_TYPE_AUDIO:
@@ -7524,7 +7524,6 @@ static struct ast_frame *ast_rtp_read(struct ast_rtp_instance *instance, int rtc
 	} else {
 		/* The child is the parent! We don't need to unlock it. */
 		child = NULL;
-		ast_debug(1, "The child is the parent! We don't need to unlock it\n");
 	}
 
 	/* If strict RTP protection is enabled see if we need to learn the remote address or if we need to drop the packet */
@@ -7695,8 +7694,6 @@ static struct ast_frame *ast_rtp_read(struct ast_rtp_instance *instance, int rtc
 				ast_debug(0, "RTP NAT: Got audio from other end. Now sending to address %s\n",
 					  ast_sockaddr_stringify(&remote_address));
 		}
-	} else {
-		ast_debug(1, "symmetric RTP is disabled\n");
 	}
 
 	/* Pull out the various other fields we will need */
