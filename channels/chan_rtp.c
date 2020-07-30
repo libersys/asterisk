@@ -407,8 +407,7 @@ static struct ast_channel *unicast_rtp_request(const char *type, struct ast_form
 	// ast_rtp_codecs_payloads_xover(&codecs, &codecs, NULL); // XXX DOUBLE CHECK
 	// ast_rtp_codecs_payloads_copy(&codecs, ast_rtp_instance_get_codecs(instance), instance);
 
-	ast_debug(1, "UnicastRTP/%s-%p codec created '%s'\n", 
-		args.destination, instance, ast_format_get_codec_name(fmt));
+	ast_debug(1, "UnicastRTP/%s-%p codec created '%s'\n", args.destination, instance, ast_format_get_codec_name(fmt));
 
 	// ast_rtp_codecs_payloads_destroy(&codecs);
 	// ast_rtp_codecs_payloads_set_m_type(ast_rtp_instance_get_codecs(sub->rtp), sub->rtp, codec);
