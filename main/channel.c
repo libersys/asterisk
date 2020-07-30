@@ -3524,11 +3524,6 @@ static struct ast_frame *__ast_read(struct ast_channel *chan, int dropaudio, int
 	int cause = 0;
 	struct ast_stream *stream = NULL, *default_stream = NULL;
 
-	// // ast_framehook_list_is_empty(ast_channel_framehooks(chan)
-
-	// ast_debug(1, "START __ast_read channel '%s'. dropaudio=%d, dropnondefault=%d\n", 
-	// 		ast_channel_name(chan), dropaudio, dropnondefault);
-
 	/* this function is very long so make sure there is only one return
 	 * point at the end (there are only two exceptions to this).
 	 */
@@ -3649,9 +3644,6 @@ static struct ast_frame *__ast_read(struct ast_channel *chan, int dropaudio, int
 		ast_channel_generator(chan)->generate(chan, tmp, -1, -1);
 		ast_channel_generatordata_set(chan, tmp);
 		f = &ast_null_frame;
-
-		// ast_debug(1, "__ast_read channel '%s'. ast_channel_timingfd\n", ast_channel_name(chan));
-
 		ast_channel_fdno_set(chan, -1);
 		goto done;
 	} else if (ast_channel_fd_isset(chan, AST_JITTERBUFFER_FD) && ast_channel_fdno(chan) == AST_JITTERBUFFER_FD) {
@@ -3662,13 +3654,8 @@ static struct ast_frame *__ast_read(struct ast_channel *chan, int dropaudio, int
 	   one sizeof(blah) per frame that we send from it */
 	if (ast_channel_internal_alert_read(chan) == AST_ALERT_READ_FATAL) {
 		f = &ast_null_frame;
-
-		// ast_debug(1, "__ast_read channel '%s'. AST_ALERT_READ_FATAL\n", ast_channel_name(chan));
-
 		goto done;
 	}
-
-	// if (f) ast_debug(1, "BLOCK 1 __ast_read %s, frame type=%d\n", ast_channel_name(chan), f->frametype);
 
 	/* Check for pending read queue */
 	if (!AST_LIST_EMPTY(ast_channel_readq(chan))) {
@@ -3693,9 +3680,6 @@ static struct ast_frame *__ast_read(struct ast_channel *chan, int dropaudio, int
 		if (!f) {
 			/* There were no acceptable frames on the readq. */
 			f = &ast_null_frame;
-
-			ast_debug(1, "__ast_read channel '%s'. There were no acceptable frames on the readq\n", ast_channel_name(chan));
-
 			if (!skipped_dtmf_frame) {
 				/*
 				 * Do not trigger alert pipe if only buffered dtmf begin or end frames
@@ -3743,9 +3727,6 @@ static struct ast_frame *__ast_read(struct ast_channel *chan, int dropaudio, int
 				if (!stream) {
 					ast_frfree(f);
 					f = &ast_null_frame;
-
-					ast_debug(1, "__ast_read channel '%s'. format that has not been negotiated\n", ast_channel_name(chan));
-
 				} else {
 					f->stream_num = ast_stream_get_position(stream);
 				}
@@ -3796,9 +3777,6 @@ static struct ast_frame *__ast_read(struct ast_channel *chan, int dropaudio, int
 		/* Perform the framehook read event here. After the frame enters the framehook list
 		 * there is no telling what will happen, <insert mad scientist laugh here>!!! */
 		f = ast_framehook_list_read_event(ast_channel_framehooks(chan), f);
-
-		ast_debug(1, "__ast_read %s, ast_framehook_list_read_event frame type=%d, media type=%d\n", 
-			ast_channel_name(chan), f->frametype, ast_format_get_type(f->subclass.format));
 	}
 
 	/*
@@ -3808,18 +3786,6 @@ static struct ast_frame *__ast_read(struct ast_channel *chan, int dropaudio, int
 	ast_channel_fdno_set(chan, -1);
 
 	if (f) {
-
-		// ast_debug(1, "f is known! __ast_read channel '%s'. frameType=%d, dropaudio=%d, dropnondefault=%d\n", ast_channel_name(chan), dropaudio, dropnondefault);
-
-		// struct ast_str *codec_buf = ast_str_alloca(AST_FORMAT_CAP_NAMES_LEN);
-		// /* If media was received from a non-default stream don't perform any actions, let it just go through */
-		// if (stream != default_stream) {
-		// 	ast_debug(1, "stream != default_stream,  %s\n", ast_format_cap_get_names(ast_stream_get_formats(stream), &codec_buf));
-		// 	break;
-		// } else {
-		// 	ast_debug(1, "processing stream %s\n", ast_format_cap_get_names(ast_stream_get_formats(stream), &codec_buf));
-		// }
-
 		struct ast_frame *readq_tail = AST_LIST_LAST(ast_channel_readq(chan));
 		struct ast_control_read_action_payload *read_action_payload;
 		struct ast_party_connected_line connected;
@@ -3840,12 +3806,7 @@ static struct ast_frame *__ast_read(struct ast_channel *chan, int dropaudio, int
 			 */
 			ast_frfree(f);
 			f = &ast_null_frame;
-
-			ast_debug(1, "__ast_read channel '%s'. dropnondefault && stream != default_stream\n", ast_channel_name(chan));
-
 		}
-
-		// ast_debug(1, "__ast_read channel '%s', entering swith frameType=%d\n", ast_channel_name(chan), f->frametype);
 
 		switch (f->frametype) {
 		case AST_FRAME_CONTROL:
@@ -4083,6 +4044,10 @@ static struct ast_frame *__ast_read(struct ast_channel *chan, int dropaudio, int
 			}
 			break;
 		case AST_FRAME_VOICE:
+			/* If media was received from a non-default stream don't perform any actions, let it just go through */
+			if (stream != default_stream) {
+				break;
+			}
 
 			/* The EMULATE_DTMF flag must be cleared here as opposed to when the duration
 			 * is reached , because we want to make sure we pass at least one
@@ -4318,25 +4283,21 @@ done:
 
 struct ast_frame *ast_read(struct ast_channel *chan)
 {
-	ast_debug(1, "ast_read(%s).\n", ast_channel_name(chan));
 	return __ast_read(chan, 0, 1);
 }
 
 struct ast_frame *ast_read_stream(struct ast_channel *chan)
 {
-	ast_debug(1, "ast_read_stream(%s).\n", ast_channel_name(chan));
 	return __ast_read(chan, 0, 0);
 }
 
 struct ast_frame *ast_read_noaudio(struct ast_channel *chan)
 {
-	ast_debug(1, "ast_read_noaudio(%s).\n", ast_channel_name(chan));
 	return __ast_read(chan, 1, 1);
 }
 
 struct ast_frame *ast_read_stream_noaudio(struct ast_channel *chan)
 {
-	ast_debug(1, "ast_read_stream_noaudio(%s).\n", ast_channel_name(chan));
 	return __ast_read(chan, 1, 0);
 }
 
