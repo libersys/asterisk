@@ -411,7 +411,7 @@ static struct ast_channel *unicast_rtp_request(const char *type, struct ast_form
 	ast_debug(1, "UnicastRTP/%s-%p codec created '%s'\n", 
 		args.destination, instance, ast_format_get_codec_name(fmt));
 
-	ast_rtp_codecs_payloads_destroy(&codecs);
+	// ast_rtp_codecs_payloads_destroy(&codecs);
 	// ast_rtp_codecs_payloads_set_m_type(ast_rtp_instance_get_codecs(sub->rtp), sub->rtp, codec);
 	// ast_rtp_codecs_payloads_set_rtpmap_type(ast_rtp_instance_get_codecs(sub->rtp), sub->rtp, codec, "audio", mimeSubtype, 0);
 	// ast_rtp_codecs_payload_formats(ast_rtp_instance_get_codecs(sub->rtp), peercap, &peerNonCodecCapability);
