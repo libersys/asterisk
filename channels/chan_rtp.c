@@ -276,7 +276,7 @@ static struct ast_channel *unicast_rtp_request(const char *type, struct ast_form
 	struct ast_channel *chan;
 	struct ast_format_cap *caps = NULL;
 	struct ast_format *fmt = NULL;
-	struct ast_rtp_codecs codecs = AST_RTP_CODECS_NULL_INIT;
+	// struct ast_rtp_codecs codecs = AST_RTP_CODECS_NULL_INIT;
 
 	const char *engine_name;
 	AST_DECLARE_APP_ARGS(args,
@@ -389,16 +389,24 @@ static struct ast_channel *unicast_rtp_request(const char *type, struct ast_form
 	payload_type = ast_rtp_codecs_payload_code(ast_rtp_instance_get_codecs(instance), 1, fmt, 0);
 	ast_rtp_codecs_payload_set_rx(ast_rtp_instance_get_codecs(instance), payload_type, fmt);
 	ast_debug(1, "UnicastRTP/%s-%p payload type set %d\n", args.destination, instance, rtp_code);
-	// Step #2. Record tx payload type information that was seen in an m= SDP line.
-	ast_rtp_codecs_payloads_set_m_type(codecs, instance, payload_type);
-	// Step #3. Set tx payload type to a known MIME media type for a codec with a specific sample rate.
-	ast_rtp_codecs_payloads_set_rtpmap_type_rate(codecs, instance, payload_type, "audio", "opus", 0, 48000)
 
-	// 2. Set framing
-	ast_format_cap_set_framing(caps, codecs);
+	// Step #2 Set framing
+	ast_format_cap_set_framing(caps, 20);
+	ast_debug(1, "UnicastRTP/%s-%p framing set to %d ms\n", args.destination, instance, caps->framing);
+
+	// Step #3 Record tx payload type information that was seen in an m= SDP line.
+	ast_rtp_codecs_payloads_set_m_type(ast_rtp_instance_get_codecs(instance), instance, payload_type);
+	ast_debug(1, "UnicastRTP/%s-%p tx payload type recorded ast_rtp_codecs_payloads_set_m_type '%s'\n", 
+		args.destination, instance, ast_format_get_codec_name(fmt));
+
+	// Step #4 Set tx payload type to a known MIME media type for a codec with a specific sample rate.
+	ast_rtp_codecs_payloads_set_rtpmap_type_rate(ast_rtp_instance_get_codecs(instance), instance, payload_type, "audio", "opus", 0, 48000)
+	ast_debug(1, "UnicastRTP/%s-%p MIME media type set ast_rtp_codecs_payloads_set_rtpmap_type_rate '%s'\n", 
+		args.destination, instance, ast_format_get_codec_name(fmt));
+
 	// 3. Set codec rtp payloads.
-	ast_rtp_codecs_payloads_xover(&codecs, &codecs, NULL); // XXX DOUBLE CHECK
-	ast_rtp_codecs_payloads_copy(&codecs, ast_rtp_instance_get_codecs(instance), instance);
+	// ast_rtp_codecs_payloads_xover(&codecs, &codecs, NULL); // XXX DOUBLE CHECK
+	// ast_rtp_codecs_payloads_copy(&codecs, ast_rtp_instance_get_codecs(instance), instance);
 
 	ast_debug(1, "UnicastRTP/%s-%p codec created '%s'\n", 
 		args.destination, instance, ast_format_get_codec_name(fmt));
