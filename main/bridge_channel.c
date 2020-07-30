@@ -3122,7 +3122,7 @@ void ast_bridge_channel_stream_map(struct ast_bridge_channel *bridge_channel)
 		&bridge_channel->bridge->media_types, &bridge_channel->stream_map.to_bridge,
 		&bridge_channel->stream_map.to_channel);
 
-	ast_debug(1, "ast_bridge_channel_stream_map %s \n", ast_channel_name(bridge_channel));
+	// ast_debug(1, "ast_bridge_channel_stream_map %s \n", ast_channel_name(bridge_channel));
 
 	ast_channel_unlock(bridge_channel->chan);
 	ast_bridge_channel_unlock(bridge_channel);
