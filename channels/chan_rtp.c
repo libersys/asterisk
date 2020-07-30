@@ -401,7 +401,7 @@ static struct ast_channel *unicast_rtp_request(const char *type, struct ast_form
 	// Step #4 Set tx payload type to a known MIME media type for a codec with a specific sample rate.
 	ast_rtp_codecs_payloads_set_rtpmap_type_rate(ast_rtp_instance_get_codecs(instance), instance, payload_type, "audio", "opus", 0, 48000)
 	// ast_debug(1, "UnicastRTP/%s-%p MIME media type set ast_rtp_codecs_payloads_set_rtpmap_type_rate\n", args.destination, instance, ast_format_get_codec_name(fmt));
-	ast_debug(1, "UnicastRTP/%s-%p MIME media type set ast_rtp_codecs_payloads_set_rtpmap_type_rate\n", args.destination, instance);
+	ast_debug(1, "UnicastRTP/%s-%p MIME media type set ast_rtp_codecs_payloads_set_rtpmap_type_rate '%s'\n", args.destination, instance, ast_format_get_codec_name(fmt));
 
 	// 3. Set codec rtp payloads.
 	// ast_rtp_codecs_payloads_xover(&codecs, &codecs, NULL); // XXX DOUBLE CHECK
