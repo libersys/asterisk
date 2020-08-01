@@ -65,7 +65,8 @@ static struct opus_attr default_opus_attr = {
 	.cbr = CODEC_OPUS_DEFAULT_CBR,
 	.fec = CODEC_OPUS_DEFAULT_FEC,
 	.dtx = CODEC_OPUS_DEFAULT_DTX,
-	.spropmaxcapturerate = CODEC_OPUS_DEFAULT_SAMPLE_RATE,
+	// .spropmaxcapturerate = CODEC_OPUS_DEFAULT_SAMPLE_RATE,
+	.spropmaxcapturerate = 16000,
 	.spropstereo = CODEC_OPUS_DEFAULT_STEREO,
 	.maxptime = CODEC_OPUS_DEFAULT_MAX_PTIME
 };
