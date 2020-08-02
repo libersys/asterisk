@@ -202,25 +202,28 @@ static void opus_generate_sdp_fmtp(const struct ast_format *format, unsigned int
 			CODEC_OPUS_ATTR_MAX_AVERAGE_BITRATE, attr->maxbitrate);
 	}
 
-	if (CODEC_OPUS_DEFAULT_STEREO != attr->stereo) {
+	// Always send stereo=0
+	// if (CODEC_OPUS_DEFAULT_STEREO != attr->stereo) {
 		ast_str_append(str, 0, "%s=%d;",
 			CODEC_OPUS_ATTR_STEREO, attr->stereo);
-	}
+	// }
 
-	if (CODEC_OPUS_DEFAULT_STEREO != attr->spropstereo) {
+	// Always send sprop-stereo=0
+	// if (CODEC_OPUS_DEFAULT_STEREO != attr->spropstereo) {
 		ast_str_append(str, 0, "%s=%d;",
 			CODEC_OPUS_ATTR_SPROP_STEREO, attr->spropstereo);
-	}
+	// }
 
 	if (CODEC_OPUS_DEFAULT_CBR != attr->cbr) {
 		ast_str_append(str, 0, "%s=%d;",
 			CODEC_OPUS_ATTR_CBR, attr->cbr);
 	}
 
-	if (CODEC_OPUS_DEFAULT_FEC!= attr->fec) {
+	// Always send fec=0
+	// if (CODEC_OPUS_DEFAULT_FEC!= attr->fec) {
 		ast_str_append(str, 0, "%s=%d;",
 		       CODEC_OPUS_ATTR_FEC, attr->fec);
-	}
+	// }
 
 	if (CODEC_OPUS_DEFAULT_DTX != attr->dtx) {
 		ast_str_append(str, 0, "%s=%d;",
