@@ -7107,6 +7107,8 @@ static struct ast_frame *ast_rtp_interpret(struct ast_rtp_instance *instance, st
 	RAII_VAR(struct ast_rtp_payload_type *, payload, NULL, ao2_cleanup);
 	struct frame_list frames;
 
+	// ast_debug(1, "interpreting RTP from '%s'\n", ast_sockaddr_stringify(remote_address));
+
 	/* If this payload is encrypted then decrypt it using the given SRTP instance */
 	if ((*read_area & 0xC0) && res_srtp && srtp && res_srtp->unprotect(
 		    srtp, read_area, &res, 0) < 0) {
@@ -7128,16 +7130,20 @@ static struct ast_frame *ast_rtp_interpret(struct ast_rtp_instance *instance, st
 	seqno &= 0xffff;
 	timestamp = ntohl(rtpheader[1]);
 
+	// ast_debug(1, "interpreting RTP from '%s', fields pulled out seqno=%d\n", ast_sockaddr_stringify(remote_address), seqno);
+
 	AST_LIST_HEAD_INIT_NOLOCK(&frames);
 
 	/* Remove any padding bytes that may be present */
 	if (padding) {
 		res -= read_area[res - 1];
+		// ast_debug(1, "interpreting RTP from '%s', padding removed\n", ast_sockaddr_stringify(remote_address));
 	}
 
 	/* Skip over any CSRC fields */
 	if (cc) {
 		hdrlen += cc * 4;
+		// ast_debug(1, "interpreting RTP from '%s', CSRC skipped\n", ast_sockaddr_stringify(remote_address));
 	}
 
 	/* Look for any RTP extensions, currently we do not support any */
@@ -7174,6 +7180,8 @@ static struct ast_frame *ast_rtp_interpret(struct ast_rtp_instance *instance, st
 		rtp->seedrxseqno = seqno;
 	}
 
+	// ast_debug(1, "interpreting RTP from '%s', rtp->rxcount++ passed\n", ast_sockaddr_stringify(remote_address));
+
 	/* Do not schedule RR if RTCP isn't run */
 	if (rtp->rtcp && !ast_sockaddr_isnull(&rtp->rtcp->them) && rtp->rtcp->schedid < 0) {
 		/* Schedule transmission of Receiver Report */
@@ -7197,6 +7205,8 @@ static struct ast_frame *ast_rtp_interpret(struct ast_rtp_instance *instance, st
 		struct timeval rxtime;
 		struct ast_frame *f;
 
+		// ast_debug(1, "interpreting RTP from '%s', directly bridged to another instance\n", ast_sockaddr_stringify(remote_address));
+
 		/* Update statistics for jitter so they are correct in RTCP */
 		calc_rxstamp(&rxtime, rtp, timestamp, mark);
 
@@ -7211,12 +7221,17 @@ static struct ast_frame *ast_rtp_interpret(struct ast_rtp_instance *instance, st
 	payload = ast_rtp_codecs_get_payload(ast_rtp_instance_get_codecs(instance), payloadtype);
 	if (!payload) {
 		/* Unknown payload type. */
+		// ast_debug(1, "interpreting RTP from '%s', Unknown payload type.\n", ast_sockaddr_stringify(remote_address));
+
 		return AST_LIST_FIRST(&frames) ? AST_LIST_FIRST(&frames) : &ast_null_frame;
 	}
 
 	/* If the payload is not actually an Asterisk one but a special one pass it off to the respective handler */
 	if (!payload->asterisk_format) {
 		struct ast_frame *f = NULL;
+
+		// ast_debug(1, "interpreting RTP from '%s', !payload->asterisk_format\n", ast_sockaddr_stringify(remote_address));
+
 		if (payload->rtp_code == AST_RTP_DTMF) {
 			/* process_dtmf_rfc2833 may need to return multiple frames. We do this
 			 * by passing the pointer to the frame list to it so that the method
@@ -7244,6 +7259,9 @@ static struct ast_frame *ast_rtp_interpret(struct ast_rtp_instance *instance, st
 
 	ao2_replace(rtp->lastrxformat, payload->format);
 	ao2_replace(rtp->f.subclass.format, payload->format);
+
+	// ast_debug(1, "RTP received from '%s', format type=%d\n", ast_sockaddr_stringify(remote_address), ast_format_get_type(rtp->f.subclass.format));
+
 	switch (ast_format_get_type(rtp->f.subclass.format)) {
 	case AST_MEDIA_TYPE_AUDIO:
 		rtp->f.frametype = AST_FRAME_VOICE;
@@ -7478,6 +7496,7 @@ static struct ast_frame *ast_rtp_read(struct ast_rtp_instance *instance, int rtc
 
 	/* If the version is not what we expected by this point then just drop the packet */
 	if (version != 2) {
+		ast_debug(1, "version != 2\n");
 		return &ast_null_frame;
 	}
 
@@ -7491,6 +7510,7 @@ static struct ast_frame *ast_rtp_read(struct ast_rtp_instance *instance, int rtc
 	child = rtp_find_instance_by_packet_source_ssrc(instance, rtp, ssrc);
 	if (!child) {
 		/* Neither the bundled parent nor any child has this SSRC */
+		ast_debug(1, "Neither the bundled parent nor any child has this SSRC\n");
 		return &ast_null_frame;
 	}
 	if (child != instance) {
@@ -7500,6 +7520,7 @@ static struct ast_frame *ast_rtp_read(struct ast_rtp_instance *instance, int rtc
 		ao2_lock(child);
 		instance = child;
 		rtp = ast_rtp_instance_get_data(instance);
+		ast_debug(1, "It is safe to hold the child lock while holding the parent lock\n");
 	} else {
 		/* The child is the parent! We don't need to unlock it. */
 		child = NULL;
@@ -7623,6 +7644,8 @@ static struct ast_frame *ast_rtp_read(struct ast_rtp_instance *instance, int rtc
 				ast_debug(1, "%p -- Received RTP packet from %s, dropping due to strict RTP protection. Qualifying new stream.\n",
 					rtp, ast_sockaddr_stringify(&addr));
 			}
+
+			ast_debug(1, "ast_sockaddr_isnull(&rtp->strict_rtp_address) == true\n");
 			return &ast_null_frame;
 		}
 		/* Fall through */
@@ -7727,12 +7750,19 @@ static struct ast_frame *ast_rtp_read(struct ast_rtp_instance *instance, int rtc
 	rtp->lastrxseqno = seqno;
 
 	if (!rtp->recv_buffer) {
+		// ast_debug(1, "RTP from '%s' and no rtp->recv_buffer\n", ast_sockaddr_stringify(&addr));
+
 		/* If there is no receive buffer then we can pass back the frame directly */
 		frame = ast_rtp_interpret(instance, srtp, &addr, read_area, res, prev_seqno);
+
+		// ast_debug(1, "RTP from '%s' frame type %d\n", ast_sockaddr_stringify(&addr), frame->frametype);
+
 		AST_LIST_INSERT_TAIL(&frames, frame, frame_list);
 		return AST_LIST_FIRST(&frames);
 	} else if (rtp->expectedrxseqno == -1 || seqno == rtp->expectedrxseqno) {
 		rtp->expectedrxseqno = seqno + 1;
+
+		// ast_debug(1, "RTP from '%s' rtp->expectedrxseqno == -1 || seqno == rtp->expectedrxseqno\n", ast_sockaddr_stringify(&addr));
 
 		/* We've cycled over, so go back to 0 */
 		if (rtp->expectedrxseqno == SEQNO_CYCLE_OVER) {
@@ -7744,6 +7774,8 @@ static struct ast_frame *ast_rtp_read(struct ast_rtp_instance *instance, int rtc
 		 */
 		if (!ast_data_buffer_count(rtp->recv_buffer)) {
 			frame = ast_rtp_interpret(instance, srtp, &addr, read_area, res, prev_seqno);
+			// ast_debug(1, "RTP from '%s' !ast_data_buffer_count(rtp->recv_buffer) frametype=%d\n", ast_sockaddr_stringify(&addr), frame->frametype);
+
 			AST_LIST_INSERT_TAIL(&frames, frame, frame_list);
 			return AST_LIST_FIRST(&frames);
 		}
@@ -7759,6 +7791,9 @@ static struct ast_frame *ast_rtp_read(struct ast_rtp_instance *instance, int rtc
 		 */
 		if (!ast_data_buffer_get(rtp->recv_buffer, rtp->expectedrxseqno)) {
 			frame = ast_rtp_interpret(instance, srtp, &addr, read_area, res, prev_seqno);
+
+			// ast_debug(1, "RTP from '%s' !ast_data_buffer_get(rtp->recv_buffer, rtp->expectedrxseqno) frametype=%d\n", ast_sockaddr_stringify(&addr), frame->frametype);
+
 			AST_LIST_INSERT_TAIL(&frames, frame, frame_list);
 			return AST_LIST_FIRST(&frames);
 		}
@@ -7769,6 +7804,7 @@ static struct ast_frame *ast_rtp_read(struct ast_rtp_instance *instance, int rtc
 		 * of order packet processing by libsrtp which we are trying to avoid.
 		 */
 		frame = ast_frdup(ast_rtp_interpret(instance, srtp, &addr, read_area, res, prev_seqno));
+		// ast_debug(1, "RTP from '%s' Otherwise we need to dupe the frame frametype=%d\n", ast_sockaddr_stringify(&addr), frame->frametype);
 		if (frame) {
 			AST_LIST_INSERT_TAIL(&frames, frame, frame_list);
 			prev_seqno = seqno;
@@ -8048,6 +8084,7 @@ static struct ast_frame *ast_rtp_read(struct ast_rtp_instance *instance, int rtc
 			res = ast_rtcp_generate_compound_prefix(instance, rtcpheader, rtcp_report, &sr);
 
 			if (res == 0 || res == 1) {
+				ast_debug(1, "ast_rtcp_generate_compound_prefix returned 0 || 1\n");
 				return &ast_null_frame;
 			}
 

@@ -42,6 +42,7 @@
 #include "asterisk/rtp_engine.h"
 #include "asterisk/causes.h"
 #include "asterisk/format_cache.h"
+#include "asterisk/format_cap.h"
 #include "asterisk/multicast_rtp.h"
 #include "asterisk/dns_core.h"
 
@@ -275,6 +276,8 @@ static struct ast_channel *unicast_rtp_request(const char *type, struct ast_form
 	struct ast_channel *chan;
 	struct ast_format_cap *caps = NULL;
 	struct ast_format *fmt = NULL;
+	// struct ast_rtp_codecs codecs = AST_RTP_CODECS_NULL_INIT;
+
 	const char *engine_name;
 	AST_DECLARE_APP_ARGS(args,
 		AST_APP_ARG(destination);
@@ -321,9 +324,12 @@ static struct ast_channel *unicast_rtp_request(const char *type, struct ast_form
 		goto failure;
 	}
 
+	ast_debug(1, "'UnicastRTP' channel options '%s' parsed\n", args.options);
+
 	if (ast_test_flag(&opts, OPT_RTP_CODEC)
 		&& !ast_strlen_zero(opt_args[OPT_ARG_RTP_CODEC])) {
 		fmt = ast_format_cache_get(opt_args[OPT_ARG_RTP_CODEC]);
+		ast_debug(1, "Codec '%s' found for sending RTP to '%s'\n", opt_args[OPT_ARG_RTP_CODEC], args.destination);
 		if (!fmt) {
 			ast_log(LOG_ERROR, "Codec '%s' not found for sending RTP to '%s'\n",
 				opt_args[OPT_ARG_RTP_CODEC], args.destination);
@@ -331,6 +337,7 @@ static struct ast_channel *unicast_rtp_request(const char *type, struct ast_form
 		}
 	} else {
 		fmt = derive_format_from_cap(cap);
+		ast_debug(1, "No codec option for sending RTP to '%s', using derive_format_from_cap(cap)\n", args.destination);
 		if (!fmt) {
 			ast_log(LOG_ERROR, "No codec available for sending RTP to '%s'\n",
 				args.destination);
@@ -373,6 +380,36 @@ static struct ast_channel *unicast_rtp_request(const char *type, struct ast_form
 	ast_channel_tech_set(chan, &unicast_rtp_tech);
 
 	ast_format_cap_append(caps, fmt, 0);
+
+	/* ADD YOUR CODE HERE */
+
+	/* CREATE CODECS */
+	// Step #1 Get the Asterisk payload type
+	int payload_type;
+	payload_type = ast_rtp_codecs_payload_code(ast_rtp_instance_get_codecs(instance), 1, fmt, 0);
+	ast_rtp_codecs_payload_set_rx(ast_rtp_instance_get_codecs(instance), payload_type, fmt);
+	ast_debug(1, "UnicastRTP/%s-%p payload type set %d\n", args.destination, instance, payload_type);
+
+	// Step #2 Set framing
+	ast_format_cap_set_framing(caps, 20);
+	ast_debug(1, "UnicastRTP/%s-%p framing set to 20 ms\n", args.destination, instance);
+
+	// Step #3 Record tx payload type information that was seen in an m= SDP line.
+	ast_rtp_codecs_payloads_set_m_type(ast_rtp_instance_get_codecs(instance), instance, payload_type);
+	ast_debug(1, "UnicastRTP/%s-%p tx payload type recorded ast_rtp_codecs_payloads_set_m_type '%s'\n", args.destination, instance, ast_format_get_codec_name(fmt));
+
+	// Step #4 Set tx payload type to a known MIME media type for a codec with a specific sample rate.
+	ast_rtp_codecs_payloads_set_rtpmap_type_rate(ast_rtp_instance_get_codecs(instance), instance, payload_type, "audio", "opus", 0, 48000);
+	ast_debug(1, "UnicastRTP/%s-%p MIME media type set ast_rtp_codecs_payloads_set_rtpmap_type_rate '%s'\n", args.destination, instance, ast_format_get_codec_name(fmt));
+
+	// Step #5. Add buffers
+	ast_rtp_instance_set_prop(instance, AST_RTP_PROPERTY_RETRANS_SEND, 1);
+	ast_rtp_instance_set_prop(instance, AST_RTP_PROPERTY_RETRANS_RECV, 1);
+
+	ast_debug(1, "UnicastRTP/%s-%p codec created '%s'\n", args.destination, instance, ast_format_get_codec_name(fmt));
+
+	/* END OF NEW CODE*/
+
 	ast_channel_nativeformats_set(chan, caps);
 	ast_channel_set_writeformat(chan, fmt);
 	ast_channel_set_rawwriteformat(chan, fmt);

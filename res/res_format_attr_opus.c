@@ -58,13 +58,15 @@ struct opus_attr {
 
 static struct opus_attr default_opus_attr = {
 	.maxbitrate = CODEC_OPUS_DEFAULT_BITRATE,
-	.maxplayrate = CODEC_OPUS_DEFAULT_SAMPLE_RATE,
+	// .maxplayrate = CODEC_OPUS_DEFAULT_SAMPLE_RATE,
+	.maxplayrate = 16000,
 	.ptime = CODEC_OPUS_DEFAULT_PTIME,
 	.stereo = CODEC_OPUS_DEFAULT_STEREO,
 	.cbr = CODEC_OPUS_DEFAULT_CBR,
 	.fec = CODEC_OPUS_DEFAULT_FEC,
 	.dtx = CODEC_OPUS_DEFAULT_DTX,
-	.spropmaxcapturerate = CODEC_OPUS_DEFAULT_SAMPLE_RATE,
+	// .spropmaxcapturerate = CODEC_OPUS_DEFAULT_SAMPLE_RATE,
+	.spropmaxcapturerate = 16000,
 	.spropstereo = CODEC_OPUS_DEFAULT_STEREO,
 	.maxptime = CODEC_OPUS_DEFAULT_MAX_PTIME
 };
@@ -178,6 +180,7 @@ static void opus_generate_sdp_fmtp(const struct ast_format *format, unsigned int
 		 * Therefore, we assume the default attribute values here.
 		 */
 		attr = &default_opus_attr;
+		ast_debug(1, "opus: using default attribute values\n");
 	}
 
 	original_size = ast_str_strlen(*str);
@@ -186,6 +189,7 @@ static void opus_generate_sdp_fmtp(const struct ast_format *format, unsigned int
 	if (CODEC_OPUS_DEFAULT_SAMPLE_RATE != attr->maxplayrate) {
 		ast_str_append(str, 0, "%s=%d;",
 			CODEC_OPUS_ATTR_MAX_PLAYBACK_RATE, attr->maxplayrate);
+		ast_debug(1, "opus: maxplayrate set to %d\n", attr->maxplayrate);
 	}
 
 	if (CODEC_OPUS_DEFAULT_SAMPLE_RATE != attr->spropmaxcapturerate) {
@@ -198,25 +202,28 @@ static void opus_generate_sdp_fmtp(const struct ast_format *format, unsigned int
 			CODEC_OPUS_ATTR_MAX_AVERAGE_BITRATE, attr->maxbitrate);
 	}
 
-	if (CODEC_OPUS_DEFAULT_STEREO != attr->stereo) {
+	// Always send stereo=0
+	// if (CODEC_OPUS_DEFAULT_STEREO != attr->stereo) {
 		ast_str_append(str, 0, "%s=%d;",
 			CODEC_OPUS_ATTR_STEREO, attr->stereo);
-	}
+	// }
 
-	if (CODEC_OPUS_DEFAULT_STEREO != attr->spropstereo) {
+	// Always send sprop-stereo=0
+	// if (CODEC_OPUS_DEFAULT_STEREO != attr->spropstereo) {
 		ast_str_append(str, 0, "%s=%d;",
 			CODEC_OPUS_ATTR_SPROP_STEREO, attr->spropstereo);
-	}
+	// }
 
 	if (CODEC_OPUS_DEFAULT_CBR != attr->cbr) {
 		ast_str_append(str, 0, "%s=%d;",
 			CODEC_OPUS_ATTR_CBR, attr->cbr);
 	}
 
-	if (CODEC_OPUS_DEFAULT_FEC!= attr->fec) {
+	// Always send fec=0
+	// if (CODEC_OPUS_DEFAULT_FEC!= attr->fec) {
 		ast_str_append(str, 0, "%s=%d;",
 		       CODEC_OPUS_ATTR_FEC, attr->fec);
-	}
+	// }
 
 	if (CODEC_OPUS_DEFAULT_DTX != attr->dtx) {
 		ast_str_append(str, 0, "%s=%d;",
